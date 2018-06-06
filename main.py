@@ -16,10 +16,8 @@ if len(sys.argv) != 2:
     print ('Usage: python main.py <verbosity>')
     sys.exit(0)
 
-
-verbosity = int(sys.argv[1]); # the verbosity of the ouputs:
 #if you have a verbosity of 3 you see levels 1, 2, and 3 for example 
-
+verbosity = int(sys.argv[1])
 # 1: essential stuff
 #   startup
 #   connections
@@ -28,7 +26,6 @@ verbosity = int(sys.argv[1]); # the verbosity of the ouputs:
 # 2: 
 #   smaller stages
 #   sent messages
-#   recieved commands
 
 # 3:
 #   recieved messages
@@ -70,7 +67,7 @@ async def on_message(m):
     # a list of the words in the message
     content = m.content.lower().split(' ')
    
-    if (m.server.id == None):
+    if (m.server == None):
         printstr ("Server: DM", 3)
     else:
         printline ("Server: "  + m.server.name, 3)
@@ -95,42 +92,50 @@ async def on_message(m):
 
 
         # command related code
-        printline('Command detected', 2);
-        printline(content, 3);
-
-        permissions = 100
-        # find person in database
-        found = False
-        for user in users:
-            if user[0] == m.author.id:
-                found = True
-                permissions = user[1]
-
-        # add to database if not there
-        if not found:
-            newguy = [m.author.id, 100]
-            name = m.author
-            users.append(newguy)
-            with open("users", "a") as f:
-                f.write(m.author.id + ':100\n');
-
         
+        printline (m.server)
+        ### Author related stuff
+        printline (m.author, 3)
+        printline (m.content, 3)
+        
+        # ignore every message not starting with mycroft
+        if content[0] == 'mycroft':
+            printline('Command detected', 2);
+            printline(content, 3);
 
-        # evaluate the message
+            permissions = 100
+            # find person in database
+            found = False
+            for user in users:
+                if user[0] == m.author.id:
+                    found = True
+                    permissions = user[1]
 
-        #default message
-        if len(content) == 1:
-            await client.send_message(m.channel, 'What do you require?')
+            # add to database if not there
+            if not found:
+                newguy = [m.author.id, 100]
+                name = m.author
+                users.append(newguy)
+                with open("users", "a") as f:
+                    f.write(m.author.id + ':100\n');
 
-        #DM only things
-        if (m.server == None and content[1] != 'help' and content[1] != 'hello'):
-            await client.send_message(m.channel, 'As of this moment, direct messages are only for the help screen and saying hi.')
+            
 
-        # regular commands
-        elif 'hello' in content[1]: 
-            await client.send_message(m.channel, 'Hello, ' + m.author.display_name + '.')
-        elif content[1] == 'help':
-            await client.send_message(m.author, helpmessage)
+            # evaluate the message
+            #default message
+            if len(content) == 1:
+                await client.send_message(m.channel, 'What do you require?')
+
+            #DM only things
+            if (m.server == None and content[1] != 'help' and content[1] != 'hello'):
+                await client.send_message(m.channel, 'As of this moment, direct messages are only for the help screen and saying hi.')
+
+            # regular commands
+            elif 'hello' in content[1]: 
+                await client.send_message(m.channel, 'Hello, ' + m.author.display_name + '.')
+            elif content[1] == 'help':
+                await client.send_message(m.author, helpmessage)
+
 
 
 
@@ -156,6 +161,7 @@ else:
 # generating users list
 for line in admins:
     line = line[:-1] # removing newline
+    print (line)
     object = line.split(':') #splitting fields 
     object[1] = int(object[1])
     printline (object, 3)
