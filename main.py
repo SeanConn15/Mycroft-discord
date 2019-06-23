@@ -10,11 +10,13 @@ import sys, traceback
 ############# Initializations ############# 
 print ('Initializing stuff')
 helpmessage = "Here are some of the things you do with mycroft:\n" + \
-              "1: Say hello to mycroft using 'hello mycroft'\n" + \
+              "he can't do shit\n" + \
               "https://github.com/SeanConn15/Mycroft-discord"
 
 
 # setting debug flag
+# changes what output is printed, and changes
+# various things for quick stopping and starting
 debug = False
 if len(sys.argv) > 1:
     if sys.argv[1] == "d":
@@ -55,13 +57,19 @@ class MycroftClient(discord.Client):
     # if an interrupt was triggered, disconnect
     async def interrupt_signal(self):
         global interruptRecieved 
+        global debug
         while True:
             if (interruptRecieved):
                  interruptRecieved = False
                  print ("Interrupt Recieved: disconnecting...")
                  await client.close()
                  print ("disconnected.")
-            await asyncio.sleep(10)
+
+            # if on debug mode check every two seconds
+            if (debug):
+                await asyncio.sleep(2)
+            else:
+                await asyncio.sleep(10)
 
 
 
@@ -90,14 +98,26 @@ async def on_ready():
 
 @client.event
 async def on_message(m):
-    dprint ("\n--Message Recieved--", 3)
-    ###definitions
+
+    # ignore things this bot sends
+    if client.user == m.author:
+        return
+
+    dprint ("\n--Message Recieved--")
+
 
     # a list of the words in the message
     content = m.content.lower().split(' ')
+    dprint ("Recieved: [{}]".format(m.content.lower()))
 
+    # ignore things that don't start with the keyword
+    keyword = "mycroft"
 
+    if (content[0] != keyword):
+        return
 
+    if (content[1] == "help"):
+       await m.author.send(helpmessage)
 
 ############# Startup ############# 
 
