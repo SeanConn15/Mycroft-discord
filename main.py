@@ -1,8 +1,9 @@
+#!/bin/python3
 import discord
 import asyncio
 import signal
 import sys, traceback
-import os.path
+#import os.path
 
 
 
@@ -12,33 +13,22 @@ helpmessage = "Here are some of the things you do with mycroft:\n" + \
               "1: Say hello to mycroft using 'hello mycroft'\n" + \
               "https://github.com/SeanConn15/Mycroft-discord"
 
-if len(sys.argv) != 2:
-    print ('Usage: python main.py <verbosity>')
-    sys.exit(0)
 
-#if you have a verbosity of 3 you see levels 1, 2, and 3 for example 
-verbosity = int(sys.argv[1])
-# 1: essential stuff
-#   startup
-#   connections
-#   errors
+# setting debug flag
+debug = False
+if len(sys.argv) > 1:
+    if sys.argv[1] == "d":
+        debug = True
 
-# 2: 
-#   smaller stages
-#   sent messages
 
-# 3:
-#   recieved messages
-#   lines read from file
 
 # debug function
-def printline(str, level = 3):
-    if(verbosity >= level):
+# if not debug_needed, prints string
+# otherwise prints string iff debug is set
+def dprint(str):
+    if(debug):
         print (str)
 
-def printstr(str, level = 3):
-    if(verbosity >= level):
-        sys.stdout.write(str)
 
 # users have a discord name, a perferred name, and a privilege level
 # privilege level
@@ -47,94 +37,64 @@ def printstr(str, level = 3):
 
 users = []
 
-client = discord.Client();
 
+# set to True if an unhandled intrrupt signal is recieved
+interruptRecieved = False
+
+############ Client Definiton ############
+# this is done to add a check for sigints and for local terminal input
+class MycroftClient(discord.Client):
+    def __init__(self, *args, **kwargs):
+
+        # do whatever discord.Client does 
+        super().__init__(*args, **kwargs)
+
+        # adding additional functions
+        self.bg_task = self.loop.create_task(self.interrupt_signal())
+
+    # if an interrupt was triggered, disconnect
+    async def interrupt_signal(self):
+        global interruptRecieved 
+        while True:
+            if (interruptRecieved):
+                 interruptRecieved = False
+                 print ("Interrupt Recieved: disconnecting...")
+                 await client.close()
+                 print ("disconnected.")
+            await asyncio.sleep(10)
+
+
+
+client = MycroftClient();
+
+############# Local Input        #############
+
+def disconnect():
+    dprint ("SIGINT Recieved, setting variable")
+    global interruptRecieved 
+    interruptRecieved = True
 
 
 ############# Asynchronus Events ############# 
 @client.event
 async def on_ready():
-    printline ("Connection established.", 1)
-    printline ("Authenicated as " + client.user.name + '.', 2)
+    print ("Connection established.")
+    dprint ("Authenicated as {}".format(client.user.name))
+
+    # register the CTRL+C signal handler to stop the bot, sets a variable in disconnect() that
+    # an asnchronous event checks
+    client.loop.add_signal_handler(signal.SIGINT, disconnect)
 
 
 ## On message recieved
+
 @client.event
 async def on_message(m):
-    printline ("\n--Message Recieved--", 3)
+    dprint ("\n--Message Recieved--", 3)
     ###definitions
 
     # a list of the words in the message
     content = m.content.lower().split(' ')
-   
-    if (m.server == None):
-        printstr ("Server: DM", 3)
-    else:
-        printline ("Server: "  + m.server.name, 3)
-
-
-    ### Author related stuff
-    printline ("Author: " + m.author.name, 3)
-    printline ("Text: " +  m.content, 3)
-
-    ## mycroft cannot talk to himself
-    if client.user == m.author:
-        return
-
-    ## you do not have to say mycroft in direct messages
-    if content[0] != 'mycroft' and m.server == None:
-        content.insert(0, 'mycroft');
-    elif m.server == None:
-        await client.send_message(m.channel, 'Some advice, if you are messaging me directly I know you are talking to me. No need to address me every time.')
-
-    # ignore every message not starting with mycroft
-    if content[0] == 'mycroft':
-
-
-        # command related code
-        
-        printline (m.server)
-        ### Author related stuff
-        printline (m.author, 3)
-        printline (m.content, 3)
-        
-        # ignore every message not starting with mycroft
-        if content[0] == 'mycroft':
-            printline('Command detected', 2);
-            printline(content, 3);
-
-            permissions = 100
-            # find person in database
-            found = False
-            for user in users:
-                if user[0] == m.author.id:
-                    found = True
-                    permissions = user[1]
-
-            # add to database if not there
-            if not found:
-                newguy = [m.author.id, 100]
-                name = m.author
-                users.append(newguy)
-                with open("users", "a") as f:
-                    f.write(m.author.id + ':100\n');
-
-            
-
-            # evaluate the message
-            #default message
-            if len(content) == 1:
-                await client.send_message(m.channel, 'What do you require?')
-
-            #DM only things
-            if (m.server == None and content[1] != 'help' and content[1] != 'hello'):
-                await client.send_message(m.channel, 'As of this moment, direct messages are only for the help screen and saying hi.')
-
-            # regular commands
-            elif 'hello' in content[1]: 
-                await client.send_message(m.channel, 'Hello, ' + m.author.display_name + '.')
-            elif content[1] == 'help':
-                await client.send_message(m.author, helpmessage)
 
 
 
@@ -146,27 +106,28 @@ async def on_message(m):
 # <user id> <permission level> 
 
 # reading from startup files
-printline ('Reading files for information on things', 1)
+print ('Reading files for information on things')
 # getting the token from the .secrets file
 tfile = open('secrets', 'r+', 1)
-token = tfile.read(59); # 59 because the token is 60 characters long and 60 didn't work
+token = tfile.readline();  
+token = token[:-1] # get rid of the newline
 tfile.close();
 
 # creating users file if needed
-if not os.path.exists('users'):
-    admins = open('users', 'w+')
-else:
-    admins = open('users', 'r')
-
-# generating users list
-for line in admins:
-    line = line[:-1] # removing newline
-    print (line)
-    object = line.split(':') #splitting fields 
-    object[1] = int(object[1])
-    printline (object, 3)
-    users.append(object)
-admins.close();
+# if not os.path.exists('users'):
+#     admins = open('users', 'w+')
+# else:
+#     admins = open('users', 'r')
+# 
+# # generating users list
+# for line in admins:
+#     line = line[:-1] # removing newline
+#     print (line)
+#     object = line.split(':') #splitting fields 
+#     object[1] = int(object[1])
+#     print (object, 3)
+#     users.append(object)
+# admins.close();
 
 # connecting to discord
 print('Making connections')
