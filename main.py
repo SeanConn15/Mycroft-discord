@@ -99,25 +99,43 @@ async def on_ready():
 @client.event
 async def on_message(m):
 
+    ## Determining if message should be ignored
+    
     # ignore things this bot sends
     if client.user == m.author:
         return
 
-    dprint ("\n--Message Recieved--")
+    if (m.channel.type == discord.ChannelType.private):
+        dprint ("\n--DM Recieved--")
+    else:
+        dprint ("\n--Message Recieved--")
 
 
     # a list of the words in the message
     content = m.content.lower().split(' ')
     dprint ("Recieved: [{}]".format(m.content.lower()))
 
-    # ignore things that don't start with the keyword
     keyword = "mycroft"
-
-    if (content[0] != keyword):
+    
+    # ignore things that don't start with the keyword,
+    # except if in a DM.
+    if (content[0] != keyword and m.channel.type != discord.ChannelType.private):
         return
 
-    if (content[1] == "help"):
+
+    ## Parsing command
+
+
+    # if the command is invoked with a keyword, remove it
+    # this is so commands can be parsed the same even if they are in DM's
+    if (content[0] == keyword):
+        del content[0]
+
+    if (content[0] == "help"):
        await m.author.send(helpmessage)
+    elif (content[0] == "hello"):
+       await m.channel.send("Hello, {}.".format(m.author.name))
+    print ()
 
 ############# Startup ############# 
 
