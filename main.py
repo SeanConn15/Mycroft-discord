@@ -43,14 +43,6 @@ def dprint(str):
         print (str)
 
 
-# users have a discord name, a perferred name, and a privilege level
-# privilege level
-# 0: do all the things
-# 1: do none of the things
-
-users = []
-
-
 # set to True if an unhandled intrrupt signal is recieved
 interruptRecieved = False
 
@@ -156,6 +148,8 @@ async def on_message(m):
         await getMeme(m, content)     
     elif (content[0] == "save"):
         await saveMeme(m, content)     
+    elif (content[0] == "list"):
+        await printMemes(m)
 
 ########## misc functions #########
 
@@ -246,11 +240,21 @@ async def saveMeme(message, content):
     ## say you saved it
     #TODO: react with fuckkin saved if that emote exists
 
+
+async def printMemes(message):
+    response = "Here's all my memes:\n"
+    for filename in os.listdir("memes/"):
+        for word in filename.split("_"):
+            if (word[-4:] == ".png"):
+                response += word[:-4] + " "
+            else:
+             response += word + " "
+        response += "\n"
+    await message.channel.send(response)
+
 ############# Startup ############# 
 
 
-# Current fields:
-# <user id> <permission level> 
 
 # reading from startup files
 print ('Reading files for information on things')
@@ -259,22 +263,6 @@ tfile = open('secrets', 'r+', 1)
 token = tfile.readline();  
 token = token[:-1] # get rid of the newline
 tfile.close();
-
-# creating users file if needed
-# if not os.path.exists('users'):
-#     admins = open('users', 'w+')
-# else:
-#     admins = open('users', 'r')
-# 
-# # generating users list
-# for line in admins:
-#     line = line[:-1] # removing newline
-#     print (line)
-#     object = line.split(':') #splitting fields 
-#     object[1] = int(object[1])
-#     print (object, 3)
-#     users.append(object)
-# admins.close();
 
 # connecting to discord
 print('Making connections')
