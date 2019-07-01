@@ -3,14 +3,25 @@ import discord
 import asyncio
 import signal
 import sys, traceback
-#import os.path
-
+import os
+from PIL import Image # for basic image processing
+#TODO: recongize me and @me if there are issues with a command
+#TODO: if someone does the cozy reaction post it from the bot
+#TODO: list available meme images
+#TODO: split things that start with the keyphrase eg m-hello > m- hello
+#TODO: make help better, command specific
+#TODO: dm me when there are issues with the bot
+#TODO: waifu roll command but search google for danny devito images
 
 
 ############# Initializations ############# 
 print ('Initializing stuff')
-helpmessage = "Here are some of the things you do with mycroft:\n" + \
-              "he can't do shit\n" + \
+keyword = "m-"
+helpmessage = "\nTo talk to mycroft, use \"{} <command> [arguments]\".\n".format(keyword) + \
+                "Here are some of the things you do with mycroft:\n" + \
+              "hello: have mycroft say hello\n" + \
+              "meme <name>: print out image \"name\", if already saved." + \
+              "save [name]: save an attached image as a meme, to be accessed by name" + \
               "https://github.com/SeanConn15/Mycroft-discord"
 
 
@@ -99,6 +110,8 @@ async def on_ready():
 @client.event
 async def on_message(m):
 
+    global keyword
+
     ## Determining if message should be ignored
     
     # ignore things this bot sends
@@ -115,8 +128,8 @@ async def on_message(m):
     content = m.content.lower().split(' ')
     dprint ("Recieved: [{}]".format(m.content.lower()))
 
-    keyword = "mycroft"
-    
+   
+
     # ignore things that don't start with the keyword,
     # except if in a DM.
     if (content[0] != keyword and m.channel.type != discord.ChannelType.private):
@@ -131,11 +144,107 @@ async def on_message(m):
     if (content[0] == keyword):
         del content[0]
 
+
     if (content[0] == "help"):
        await m.author.send(helpmessage)
     elif (content[0] == "hello"):
        await m.channel.send("Hello, {}.".format(m.author.name))
-    print ()
+    elif (content[0] == "bruce"):
+        f = discord.File(fp="memes/first.jpg", filename="test.jpg")
+        await m.channel.send(content=None, file=f)
+    elif (content[0] == "meme"):
+        await getMeme(m, content)     
+    elif (content[0] == "save"):
+        await saveMeme(m, content)     
+
+########## misc functions #########
+
+# only use png for files
+
+async def getMeme(message, content):
+
+    if (len(content) < 2):
+        await message.channel.send("yea but what meme")
+        return
+    ## get filename
+    # first word is meme
+    del content[0]
+    # concatinate everything with underscores in between
+    filename = ""
+    for s in content:
+        filename += s + '_'
+    # remove last underscore and add filetype
+    filename = filename[:-1]
+    filename += extention
+    ## try to find the file
+    df = ""
+    try:
+        df = discord.File(fp="memes/" + filename,filename=filename)
+    except IOError:
+        dprint("Tried to open file: memes/{}, failed.".format(filename))
+        await message.channel.send("I couldn't find that image.")
+        return
+
+    ##post the file
+    await message.channel.send(content=None, file=df)
+
+async def saveMeme(message, content):
+    ## validate attachment
+    if (len(content) < 2):
+        await message.channel.send("yea but what name")
+        return
+
+    # if there is no file attached
+    if not message.attachments:
+        await message.channel.send("You didn't attach an image")
+        return
+
+    ## get filename
+    # first word is meme
+    del content[0]
+    # concatinate everything with underscores in between
+    filename = ""
+    for s in content:
+        filename += s + '_'
+    # remove last underscore and add filetype
+    filename = filename[:-1]
+    filename += ".png"
+
+    ## validate filename
+    
+    # if the file already exists tell them to try another filename
+    # TODO: dont make them reupload the image
+    if (os.path.isfile("memes/" + filename)):
+        await message.channel.send("That name is already in use, try another")
+        return
+
+    #if it is not a png file, convert then save it
+    if message.attachments[0].filename[-4:] != ".png":
+        # temporarily save it
+        await message.attachments[0].save("memes/TEMP-" + filename)
+        try:
+            im = Image.open("memes/TEMP-" + filename)
+        except IOError:
+            print ("image failed to save: memes/TEMP-" + filename)
+            await message.channel.send("it didnt work, image failed to save")
+            return
+        # convert it and save it
+        rgb_im = im.convert("RGB")
+        rgb_im.save("memes/" + filename)
+        # remove the temporary file
+        os.remove("memes/TEMP-" + filename)
+
+    #otherwise just save it
+    else:
+    ## save meme
+        await message.attachments[0].save("memes/" + filename)
+
+    if (os.path.isfile("memes/" + filename)):
+        await message.channel.send("fuckkin saved")
+    else:
+        await message.channel.send("it didnt work")
+    ## say you saved it
+    #TODO: react with fuckkin saved if that emote exists
 
 ############# Startup ############# 
 
