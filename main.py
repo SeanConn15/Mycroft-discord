@@ -3,9 +3,13 @@ import discord
 import asyncio
 import signal
 import sys, traceback
+import subprocess # for executing shell functions
 import os
+import random
 from PIL import Image # for basic image processing
-#TODO: recongize me and @me if there are issues with a command
+
+
+#TODO: @me if there are issues with a command
 #TODO: if someone does the cozy reaction post it from the bot
 #TODO: list available meme images
 #TODO: split things that start with the keyphrase eg m-hello > m- hello
@@ -17,6 +21,8 @@ from PIL import Image # for basic image processing
 ############# Initializations ############# 
 print ('Initializing stuff')
 keyword = "m-"
+# set during initalization, the admin's unique id
+admin = 0
 helpmessage = "\nTo talk to mycroft, use \"{} <command> [arguments]\".\n".format(keyword) + \
                 "Here are some of the things you do with mycroft:\n" + \
               "hello: have mycroft say hello\n" + \
@@ -139,6 +145,11 @@ async def on_message(m):
 
     if (content[0] == "help"):
        await m.author.send(helpmessage)
+    elif (content[0] == "test"):
+        if (random.randint(0,2) == 1):
+            await m.channel.send("boop")
+        else:
+            await m.channel.send("beep")
     elif (content[0] == "hello"):
        await m.channel.send("Hello, {}.".format(m.author.name))
     elif (content[0] == "bruce"):
@@ -150,6 +161,14 @@ async def on_message(m):
         await saveMeme(m, content)     
     elif (content[0] == "list"):
         await printMemes(m)
+
+
+    # super secret admin commands
+    if (m.author.id == admin):
+        if (content[0] == "ip"):
+            response = subprocess.run("dig @resolver1.opendns.com ANY myip.opendns.com +short", shell=True, stdout=subprocess.PIPE, encoding="utf-8")
+
+            await m.channel.send("The IP of the server is: {}".format(response.stdout))
 
 ########## misc functions #########
 
@@ -169,7 +188,7 @@ async def getMeme(message, content):
         filename += s + '_'
     # remove last underscore and add filetype
     filename = filename[:-1]
-    filename += extention
+    filename += ".png"
     ## try to find the file
     df = ""
     try:
@@ -262,6 +281,8 @@ print ('Reading files for information on things')
 tfile = open('secrets', 'r+', 1)
 token = tfile.readline();  
 token = token[:-1] # get rid of the newline
+admin = tfile.readline();
+admin = int(admin[:-1])
 tfile.close();
 
 # connecting to discord
