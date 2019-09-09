@@ -14,8 +14,8 @@ from PIL import Image # for basic image processing
 #TODO: list available meme images
 #TODO: split things that start with the keyphrase eg m-hello > m- hello
 #TODO: make help better, command specific
-#TODO: dm me when there are issues with the bot
 #TODO: waifu roll command but search google for danny devito images
+#TODO: make admin only commands for controlling other things in the server
 
 
 ############# Initializations ############# 
