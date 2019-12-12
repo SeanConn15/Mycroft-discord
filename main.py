@@ -8,11 +8,14 @@ import os
 import random
 from PIL import Image # for basic image processing
 
+# for web scraping
+from selenium.webdriver import Firefox
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.common.keys import Keys
+import urllib.parse
 
 #TODO: @me if there are issues with a command
 #TODO: if someone does the cozy reaction post it from the bot
-#TODO: list available meme images
-#TODO: split things that start with the keyphrase eg m-hello > m- hello
 #TODO: make help better, command specific
 #TODO: waifu roll command but search google for danny devito images
 #TODO: make admin only commands for controlling other things in the server
@@ -28,6 +31,7 @@ helpmessage = "\nTo talk to mycroft, use \"{} <command> [arguments]\".\n".format
               "hello: have mycroft say hello\n" + \
               "meme <name>: print out image \"name\", if already saved." + \
               "save [name]: save an attached image as a meme, to be accessed by name" + \
+              "list:        list available meme names" + \
               "https://github.com/SeanConn15/Mycroft-discord"
 
 
@@ -69,10 +73,14 @@ class MycroftClient(discord.Client):
         global debug
         while True:
             if (interruptRecieved):
+                 global browser
                  interruptRecieved = False
                  print ("Interrupt Recieved: disconnecting...")
                  await client.close()
                  print ("disconnected.")
+                 #also stop the web browser
+                 browser.close()
+
 
             # if on debug mode check every two seconds
             if (debug):
@@ -124,6 +132,15 @@ async def on_message(m):
 
     # a list of the words in the message
     content = m.content.lower().split(' ')
+
+    #split messages that start with the prefix with no space
+    if (len(content[0]) > len(keyword) and content[0][:len(keyword)] == keyword):
+        #insert the two parts of the message
+        content.insert(0, keyword);
+        content.insert(1, content[1][len(keyword):])
+        #remove the old first word
+        content.remove(content[2])
+
     dprint ("Recieved: [{}]".format(m.content.lower()))
 
    
@@ -161,6 +178,8 @@ async def on_message(m):
         await saveMeme(m, content)     
     elif (content[0] == "list"):
         await printMemes(m)
+    elif (content[0] == "waifu"):
+        await getWaifu(m)
 
 
     # super secret admin commands
@@ -271,6 +290,45 @@ async def printMemes(message):
         response += "\n"
     await message.channel.send(response)
 
+
+async def getWaifu(message):
+    #gets a picture of danny devito from duckduckgo
+    #TODO: emulate whatever the waifu command does more closely, aka ownership of images
+
+    #### parse the webpage and get a list of links
+    global browser
+    #load the search
+    browser.get('https://duckduckgo.com/?q=danny+devito')
+    #click the images button
+    browser.find_element_by_class_name('js-zci-link--images').click() 
+
+    #print(browser.title)
+    images = browser.find_elements_by_class_name('tile--img__img')
+    #print(len(images))
+    if (len(images) == 0):
+        dprint("no images found in web scrape!!!")
+        dprint("HTML------------------\n\n{}\n\n-----------------".format(browser.page_source))
+        return
+
+    waifu_link = images[random.randint(0, len(images) - 1)]
+    waifu_link = urllib.parse.unquote(waifu_link.get_attribute('src'))
+    waifu_link = waifu_link[waifu_link.find('?') + 3:]
+
+    #### Select one of them and save it
+    urllib.request.urlretrieve(waifu_link, "tempWaifu.jpg")
+
+
+    #### Send it
+    try:
+        df = discord.File(fp="./tempWaifu.jpg",filename="best_waifu.jpg")
+    except IOError:
+        dprint("Tried to open a saved waifu image and failed")
+        return
+
+    ##post the file
+    await message.channel.send(content=None, file=df)
+
+
 ############# Startup ############# 
 
 
@@ -281,9 +339,15 @@ print ('Reading files for information on things')
 tfile = open('secrets', 'r+', 1)
 token = tfile.readline();  
 token = token[:-1] # get rid of the newline
-admin = tfile.readline();
-admin = int(admin[:-1])
+#admin = tfile.readline();
+#admin = int(admin[:-1])
 tfile.close();
+
+opt = Options()
+opt.headless = True
+browser = Firefox(options=opt)
+browser.get('https://duckduckgo.com/?q=danny+devito&t=h_&ia=images&iax=images')
+
 
 # connecting to discord
 print('Making connections')
