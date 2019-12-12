@@ -17,8 +17,11 @@ import urllib.parse
 #TODO: @me if there are issues with a command
 #TODO: if someone does the cozy reaction post it from the bot
 #TODO: make help better, command specific
-#TODO: waifu roll command but search google for danny devito images
+#TODO: improve waifu command, ownership etc
 #TODO: make admin only commands for controlling other things in the server
+#TODO: music playing from many sources, volume control etc
+#TODO: make dprint append to a file, for debugging (add time and stuff)
+
 
 
 ############# Initializations ############# 
@@ -29,9 +32,10 @@ admin = 0
 helpmessage = "\nTo talk to mycroft, use \"{} <command> [arguments]\".\n".format(keyword) + \
                 "Here are some of the things you do with mycroft:\n" + \
               "hello: have mycroft say hello\n" + \
-              "meme <name>: print out image \"name\", if already saved." + \
-              "save [name]: save an attached image as a meme, to be accessed by name" + \
-              "list:        list available meme names" + \
+              "meme <name>: print out image \"name\", if already saved.\n" + \
+              "save [name]: save an attached image as a meme, to be accessed by name\n" + \
+              "list:        list available meme names\n" + \
+              "waifu:       get the perfect waifu, every time.\n" + \
               "https://github.com/SeanConn15/Mycroft-discord"
 
 
@@ -325,8 +329,12 @@ async def getWaifu(message):
         dprint("Tried to open a saved waifu image and failed")
         return
 
+
     ##post the file
     await message.channel.send(content=None, file=df)
+
+    ## delete the local copy
+    os.remove("./tempWaifu.jpg")
 
 
 ############# Startup ############# 
@@ -343,13 +351,12 @@ token = token[:-1] # get rid of the newline
 #admin = int(admin[:-1])
 tfile.close();
 
+print ('Starting the browser')
 opt = Options()
 opt.headless = True
 browser = Firefox(options=opt)
-browser.get('https://duckduckgo.com/?q=danny+devito&t=h_&ia=images&iax=images')
 
 
 # connecting to discord
 print('Making connections')
 client.run(token)
-
