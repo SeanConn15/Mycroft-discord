@@ -4,23 +4,34 @@ import asyncio
 import signal
 import sys, traceback
 import subprocess # for executing shell functions
+import time
 import os
 import random
+import youtube_dl
 from PIL import Image # for basic image processing
 
 # for web scraping
-from selenium.webdriver import Firefox
+from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.keys import Keys
 import urllib.parse
-
 #TODO: @me if there are issues with a command
 #TODO: if someone does the cozy reaction post it from the bot
 #TODO: make help better, command specific
 #TODO: improve waifu command, ownership etc
 #TODO: make admin only commands for controlling other things in the server
-#TODO: music playing from many sources, volume control etc
+#TODO: basic music playing
+    #TODO: get it to play one thing from youtube
+        # download a video with youtube-dl x
+        # join a voice channel x
+        # play something in a voice channel x
+        # steam a video and play in voice channel
+        # request a video by title and get url
+        # request a video and steam in voice channel
+
 #TODO: make dprint append to a file, for debugging (add time and stuff)
+#TODO: compute how long commands take
+#TODO: better logging using module
 
 
 
@@ -42,7 +53,7 @@ helpmessage = "\nTo talk to mycroft, use \"{} <command> [arguments]\".\n".format
 # setting debug flag
 # changes what output is printed, and changes
 # various things for quick stopping and starting
-debug = False
+debug = True
 if len(sys.argv) > 1:
     if sys.argv[1] == "d":
         debug = True
@@ -57,8 +68,10 @@ def dprint(str):
         print (str)
 
 
+## global variables
 # set to True if an unhandled intrrupt signal is recieved
 interruptRecieved = False
+
 
 ############ Client Definiton ############
 # this is done to add a check for sigints and for local terminal input
@@ -86,9 +99,9 @@ class MycroftClient(discord.Client):
                  browser.close()
 
 
-            # if on debug mode check every two seconds
+            # if on debug mode check every second
             if (debug):
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
             else:
                 await asyncio.sleep(10)
 
@@ -184,6 +197,10 @@ async def on_message(m):
         await printMemes(m)
     elif (content[0] == "waifu"):
         await getWaifu(m)
+    elif (content[0] == "play"):
+        await play(m)
+    elif (content[0] == "disconnect"):
+        await disconnectVoice();
 
 
     # super secret admin commands
@@ -193,6 +210,8 @@ async def on_message(m):
 
             await m.channel.send("The IP of the server is: {}".format(response.stdout))
 
+    dprint("-- command execution complete --")
+    
 ########## misc functions #########
 
 # only use png for files
@@ -294,6 +313,19 @@ async def printMemes(message):
         response += "\n"
     await message.channel.send(response)
 
+async def play(message):
+    # connect to the requester's voice channel
+    await message.channel.send(message)
+    await message.channel.send(message.author)
+    if message.author.voice:
+        await message.channel.send(message.author.voice.channel)
+        voiceChannel = await message.author.voice.channel.connect()
+        await voiceChannel.play(discord.FFmpegPCMAudio("./piano.m4a"));
+
+async def disconnectVoice():
+    for voiceClient in client.voice_clients:
+        await voiceClient.disconnect();
+
 
 async def getWaifu(message):
     #gets a picture of danny devito from duckduckgo
@@ -351,11 +383,38 @@ token = token[:-1] # get rid of the newline
 #admin = int(admin[:-1])
 tfile.close();
 
-print ('Starting the browser')
-opt = Options()
-opt.headless = True
-browser = Firefox(options=opt)
+dprint ('Starting the browser')
 
+options = Options()
+options.headless = True
+browser = webdriver.Firefox(options=options)
+
+dprint ('Starting youtube-dl')
+
+ytdl_format_options = {
+    'format': 'bestaudio/best',
+    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
+}
+
+ffmpeg_options = {
+    'options': '-vn'
+}
+
+ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+
+#link = "https://www.youtube.com/watch?v=TAX8UHA-33Q"
+#data = ytdl.extract_info(link)
+#print (data)
+#ytdl.download([link])
 
 # connecting to discord
 print('Making connections')
