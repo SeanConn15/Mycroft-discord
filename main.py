@@ -7,7 +7,7 @@ import subprocess # for executing shell functions
 import time
 import os
 import random
-import youtube_dl
+from musicplayer import MusicPlayer
 from PIL import Image # for basic image processing
 
 # for web scraping
@@ -20,14 +20,6 @@ import urllib.parse
 #TODO: make help better, command specific
 #TODO: improve waifu command, ownership etc
 #TODO: make admin only commands for controlling other things in the server
-#TODO: basic music playing
-    #TODO: get it to play one thing from youtube
-        # download a video with youtube-dl x
-        # join a voice channel x
-        # play something in a voice channel x
-        # steam a video and play in voice channel
-        # request a video by title and get url
-        # request a video and steam in voice channel
 
 #TODO: make dprint append to a file, for debugging (add time and stuff)
 #TODO: compute how long commands take
@@ -96,7 +88,8 @@ class MycroftClient(discord.Client):
                  await client.close()
                  print ("disconnected.")
                  #also stop the web browser
-                 browser.close()
+                 if browser:
+                     browser.close()
 
 
             # if on debug mode check every second
@@ -133,6 +126,11 @@ async def on_ready():
 @client.event
 async def on_message(m):
 
+    ## TODO: remove after testing
+    if (m.author.id != admin):
+        dprint("not admin")
+        return
+
     global keyword
 
     ## Determining if message should be ignored
@@ -148,7 +146,7 @@ async def on_message(m):
 
 
     # a list of the words in the message
-    content = m.content.lower().split(' ')
+    content = m.content.split(' ')
 
     #split messages that start with the prefix with no space
     if (len(content[0]) > len(keyword) and content[0][:len(keyword)] == keyword):
@@ -158,7 +156,7 @@ async def on_message(m):
         #remove the old first word
         content.remove(content[2])
 
-    dprint ("Recieved: [{}]".format(m.content.lower()))
+    dprint ("Recieved: [{}]".format(m.content)
 
    
 
@@ -167,6 +165,10 @@ async def on_message(m):
     if (content[0] != keyword and m.channel.type != discord.ChannelType.private):
         return
 
+    # the keyword is not case sensitive
+    content[0] = content[0].lower()
+
+    # now content is [command, args, ...]
 
     ## Parsing command
 
@@ -180,7 +182,7 @@ async def on_message(m):
     if (content[0] == "help"):
        await m.author.send(helpmessage)
     elif (content[0] == "test"):
-        if (random.randint(0,2) == 1):
+        if (random.randint(0,1) == 1):
             await m.channel.send("boop")
         else:
             await m.channel.send("beep")
@@ -198,9 +200,18 @@ async def on_message(m):
     elif (content[0] == "waifu"):
         await getWaifu(m)
     elif (content[0] == "play"):
-        await play(m)
+        if len(content) < 2:
+            await m.channel.send("no song requested")
+            return
+        if m.author.voice:
+            vc = m.author.voice.channel
+        else:
+            vc = None
+
+        await mp.play(voiceChannel = vc, textChannel = m.channel, url = content[1])
     elif (content[0] == "disconnect"):
-        await disconnectVoice();
+        await mp.disconnectVoice();
+
 
 
     # super secret admin commands
@@ -313,26 +324,16 @@ async def printMemes(message):
         response += "\n"
     await message.channel.send(response)
 
-async def play(message):
-    # connect to the requester's voice channel
-    await message.channel.send(message)
-    await message.channel.send(message.author)
-    if message.author.voice:
-        await message.channel.send(message.author.voice.channel)
-        voiceChannel = await message.author.voice.channel.connect()
-        await voiceChannel.play(discord.FFmpegPCMAudio("./piano.m4a"));
-
-async def disconnectVoice():
-    for voiceClient in client.voice_clients:
-        await voiceClient.disconnect();
-
 
 async def getWaifu(message):
     #gets a picture of danny devito from duckduckgo
-    #TODO: emulate whatever the waifu command does more closely, aka ownership of images
 
     #### parse the webpage and get a list of links
     global browser
+    if not browser:
+        await message.channel.send("Browser not started")
+        return
+
     #load the search
     browser.get('https://duckduckgo.com/?q=danny+devito')
     #click the images button
@@ -369,8 +370,8 @@ async def getWaifu(message):
     os.remove("./tempWaifu.jpg")
 
 
-############# Startup ############# 
 
+############# Startup ############# 
 
 
 # reading from startup files
@@ -379,42 +380,21 @@ print ('Reading files for information on things')
 tfile = open('secrets', 'r+', 1)
 token = tfile.readline();  
 token = token[:-1] # get rid of the newline
-#admin = tfile.readline();
-#admin = int(admin[:-1])
+admin = tfile.readline();
+admin = int(admin[:-1])
 tfile.close();
 
-dprint ('Starting the browser')
+#dprint ('Starting the browser')
+#
+#options = Options()
+#options.headless = True
+#browser = webdriver.Firefox(options=options)
 
-options = Options()
-options.headless = True
-browser = webdriver.Firefox(options=options)
 
-dprint ('Starting youtube-dl')
 
-ytdl_format_options = {
-    'format': 'bestaudio/best',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-    'restrictfilenames': True,
-    'noplaylist': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
-}
-
-ffmpeg_options = {
-    'options': '-vn'
-}
-
-ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
-
-#link = "https://www.youtube.com/watch?v=TAX8UHA-33Q"
-#data = ytdl.extract_info(link)
-#print (data)
-#ytdl.download([link])
+# creating music player
+dprint("Making music player")
+mp = MusicPlayer(client);
 
 # connecting to discord
 print('Making connections')
