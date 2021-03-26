@@ -156,7 +156,7 @@ async def on_message(m):
         #remove the old first word
         content.remove(content[2])
 
-    dprint ("Recieved: [{}]".format(m.content)
+    dprint ("Recieved: [{}]".format(m.content))
 
    
 
@@ -199,16 +199,19 @@ async def on_message(m):
         await printMemes(m)
     elif (content[0] == "waifu"):
         await getWaifu(m)
-    elif (content[0] == "play"):
+    elif (content[0] == "add"):
         if len(content) < 2:
             await m.channel.send("no song requested")
             return
+        await mp.add(url = content[1])
+    elif (content[0] == "play"):
         if m.author.voice:
             vc = m.author.voice.channel
         else:
             vc = None
 
-        await mp.play(voiceChannel = vc, textChannel = m.channel, url = content[1])
+        await mp.play(voiceChannel = vc)
+
     elif (content[0] == "disconnect"):
         await mp.disconnectVoice();
 

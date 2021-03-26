@@ -34,47 +34,107 @@ class MusicPlayer:
         self.ytdl = youtube_dl.YoutubeDL(self.ytdl_format_options)
         self.volume = 1.0
 
-    async def play(self, voiceChannel, textChannel, url):
+        self.voiceClient = None
+        self.playing = False
 
-        # connect to the requester's voice channel
-        if voiceChannel:
-            
-            print ("---{}---".format(url))
-            loop = asyncio.get_event_loop()
-            try:
-                data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=False))
-            except:
-                await textChannel.send("Couldn't parse webpage. Can't play song.")
-                return
+        # has data, (made by youtubedl) and 
+        self.audio_queue = []
+        #gets set to a song queue item
+        self.currently_playing = None
 
-            #if it's a playlist
-            if 'entries' in data:
-                # take first item from a playlist
-                data = data['entries'][0]
 
-            source = discord.FFmpegPCMAudio(data['url'], **self.ffmpeg_options)
-            player = discord.PCMVolumeTransformer(source, self.volume)
+    ### commands
+    #async def playnow(self, voiceChannel):
+    #    #put what's currently playing back in the queue (if applicable)
+    #    #play the requested song
 
-            await self.joinVoice(voiceChannel)
-            if (self.voiceClient):
-                self.voiceClient.play(player,  after=self.donePlaying)
+    async def play(self, voiceChannel):
+        # unpause, or play first thing in queue
+        if (self.currently_playing is None):
+            if (len(self.audio_queue) > 0):
+                # if not connected to a voice channel
+                if self.voiceClient is None:
+                    # do that
+                    if voiceChannel is None:
+                        print ("couldn't play, dont know where to join")
+                        return
+                    await self.joinVoice(voiceChannel)
+                # get data for song
+                data = self.audio_queue[0].get('data')
+                
+                #start playing first item in queue
+                source = discord.FFmpegPCMAudio(data['url'], **self.ffmpeg_options)
+                player = discord.PCMVolumeTransformer(source, self.volume)
 
-        else:
-            await textChannel.send("You're not in a voice channel! No go.")
+                if (self.voiceClient):
+                    self.voiceClient.play(player, after=self.donePlaying)
+                else: 
+                    print ("failed to play song, no voice client")
+                    source.cleanup()
+
+                self.playing = True
+                self.currentlyPlaying = data
+                del self.audio_queue[0]
+
+
+    #async def pause():
+    #    # stop playback for now
+
+    #async def leave():
+    #    # pause and disconnect
+
+    async def add(self, url):
+        # add something to the queue
+        #stop playing whatever was playing
+        loop = asyncio.get_event_loop()
+        try:
+            data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=False))
+        except:
+            await textChannel.send("Couldn't parse webpage. Can't play song.")
+            return
+
+        #if it's a playlist
+        if 'entries' in data:
+            # take first item from a playlist
+            data = data['entries'][0]
+
+        self.audio_queue.append({
+            'data': data})
+
+    ## internals
+
+    async def nextSong(self):
+        if len(self.audio_queue) > 0:
+            await self.play(voiceChannel=None)
+
 
     def donePlaying(self, error):
         if error:
             print("error in playing song: {}".format(error))
 
-        # disconnect from voice
-        coro = self.disconnectVoice()
+        #play the next song
+        self.currently_playing = None
+        self.playing = False
+
+        coro = self.nextSong()
         fut = asyncio.run_coroutine_threadsafe(coro, self.client.loop)
         try:
             fut.result()
-        except:
+        except Exception as e:
             # an error happened sending the message
-            print("song disconnect coroutine failed");
+            print("playing next song coroutine failed: {}".format(e.message))
             pass
+
+        if not self.playing:
+            # if there's nothing to play, disconnect from voice
+            coro2 = self.disconnectVoice()
+            fut2 = asyncio.run_coroutine_threadsafe(coro2, self.client.loop)
+            try:
+                fut2.result()
+            except Exception as e:
+                # an error happened sending the message
+                print("song disconnect coroutine failed: {}".format(e.message))
+                pass
 
     # gets called after a song is done playing, maybe because of an error 
 
@@ -84,3 +144,5 @@ class MusicPlayer:
     async def disconnectVoice(self):
         for voiceClient in self.client.voice_clients:
             await voiceClient.disconnect();
+        self.voiceClient = None
+        self.playing = False
