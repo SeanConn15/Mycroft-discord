@@ -9,9 +9,31 @@ import time
         # download a video with youtube-dl x
         # join a voice channel x
         # play something in a voice channel x
-        # auto connect and disconnect afterwards
-        # steam a video and play in voice channel
-        # request a video by url and steam in voice channel
+        # auto connect and disconnect afterwards x
+        # steam a video and play in voice channel x
+        # request a video by url and steam in voice channel x
+    # basic usage:
+        # play and pause x
+        # bot volume x
+        # removing items from queue x
+        # clearing queue x
+        # current status x
+        # stop playing current song put back into queue
+        # 'play this now then continue'
+        # skip song
+        # have killing bot not leave things in weird state
+    # advanced usage:
+        # playlists as items not individual songs
+        # saving playlists
+        # fancier output
+        # typing when thinking
+        # DM's when commands fail
+        # undo/redo for queue actions
+    # misc:
+        # leave voice channel when disconnecting
+        # safe multithreading
+        # metrics
+        # reorder command that takes [#,#,#,#,#]
 
 class MusicPlayer:
     def __init__(self, client):
@@ -33,15 +55,22 @@ class MusicPlayer:
             'options': '-vn'
         }
         self.ytdl = youtube_dl.YoutubeDL(self.ytdl_format_options)
+        
+        # volume
         self.volume = 1.0
+        # the volume transformer currently in use (used to change volume)
+        self.player = None
 
-        self.voiceClient = None
-        self.playing = False
-
-        # has data, (made by youtubedl) and 
+        # dictionary, data is a dictionary of video data including stream url
         self.audio_queue = []
-        #gets set to a song queue item
+
+        self.voice_client = None
+        # is a song currently playing (false when paused)
+        self.is_playing = False
+
+        # song currently playing
         self.currently_playing = None
+
 
 
     ### commands
@@ -49,37 +78,72 @@ class MusicPlayer:
     #    #put what's currently playing back in the queue (if applicable)
     #    #play the requested song
 
-    async def play(self, voiceChannel):
-        # unpause, or play first thing in queue
-        if (self.currently_playing is None):
-            if (len(self.audio_queue) > 0):
-                # if not connected to a voice channel
-                if self.voiceClient is None:
-                    # do that
-                    if voiceChannel is None:
-                        print ("couldn't play, dont know where to join")
-                        return
-                    await self.joinVoice(voiceChannel)
-                # get data for song
-                data = self.audio_queue[0].get('data')
-                
-                #start playing first item in queue
-                source = discord.FFmpegPCMAudio(data['url'], **self.ffmpeg_options)
-                player = discord.PCMVolumeTransformer(source, self.volume)
+    # put the current song back in the queue and stop playing
+    async def stop(self):
+        # put the currently playing thing in the queue
+        self.audio_queue.insert(0, self.currently_playing)
+        # stop playing
+        self.voice_client.stop()
 
-                if (self.voiceClient):
-                    self.voiceClient.play(player, after=self.donePlaying)
-                else: 
-                    print ("failed to play song, no voice client")
-                    source.cleanup()
+    # unpause, or play first thing in queue
+    async def play(self, voiceChannel, textChannel):
+        ## preconditions
+        # if playing anything
+        if self.currently_playing is not None:
+            #if paused, continue 
+            if not self.is_playing:
+                self.voice_client.resume()
+                self.is_playing = True
+                return
+            await self.sendError(textChannel, "already playing")
+            return
+        
+        # if there is not something in the queue
+        if len(self.audio_queue) == 0:
+            await self.sendError(textChannel, "Couldn't play, no songs added")
+            return
+           
+        ## main bit
 
-                self.playing = True
-                self.currentlyPlaying = data
-                del self.audio_queue[0]
+        # ensure connection to a voice channel
+        if self.voice_client is None:
+            # connect to the user's
+            if voiceChannel is None:
+                await self.sendError(textChannel, "Couldn't play, dont know where join.")
+                return
+            await self.joinVoice(voiceChannel)
+
+        # get data for song
+        data = self.audio_queue[0].get('data')
+        source = discord.FFmpegPCMAudio(data['url'], **self.ffmpeg_options)
+        player = discord.PCMVolumeTransformer(source, self.volume)
+        player.volume = self.volume
 
 
-    #async def pause():
-    #    # stop playback for now
+        # attempt to play
+        if (self.voice_client):
+            self.voice_client.play(player, after=self.donePlaying)
+        else: 
+            await self.sendError(textChannel, "Couldn't play, no voice client")
+            source.cleanup()
+
+        # if successful, update data
+        self.is_playing = True
+        self.currently_playing = { 'data': data }
+        self.player = player
+        del self.audio_queue[0]
+        await self.set_playing(True, data.get('title'))
+
+
+
+    async def pause(self, textChannel):
+        # stop playback for now
+        if self.voice_client is None or not self.is_playing:
+            self.sendError(textChannel, "Can't pause, not playing")
+            return
+
+        self.voice_client.pause();
+        await self.set_playing(False, status=None)
 
     #async def leave():
     #    # pause and disconnect
@@ -107,6 +171,14 @@ class MusicPlayer:
 
     async def getQueue(self, textChannel):
         ret = ''
+        if self.currently_playing is not None:
+            if self.is_playing:
+                ret += "Currently Playing: " + self.string_queue_item(self.currently_playing) + "\n"
+            else:
+                ret += "Currently Playing: " + self.string_queue_item(self.currently_playing) + " (Paused)"  +  "\n"
+        else:
+            ret += "Not currently playing anything.\n"
+
         if len(self.audio_queue) == 0:
             ret += "No items in queue."
         else:
@@ -118,19 +190,75 @@ class MusicPlayer:
                 i += 1
         await textChannel.send(ret);
 
+    async def setVolume(self, volume, textChannel):
+        # volume is a string, try to turn it into a float
+        try:
+            vol = int(volume)
+        except ValueError:
+            await self.sendError(textChannel, "Couldn't parse that number, should be 1-100")
+            return
+        if vol > 100 or vol < 1:
+            await self.sendError(textChannel, "Number should be integer between 1 and 100 inclusive")
+            return
+        
+        # if that works set it
+        self.volume = vol/100
+
+        if self.player is not None:
+            self.player.volume = self.volume
+        await textChannel.send("Volume set to {}".format(volume))
+
+    async def clear(self, textChannel):
+        self.song_queue = []
+        await textChannel.send("Song queue cleared.")
+        
+    async def remove(self, index, textChannel):
+        # check validity
+        try:
+            index = int(index)
+        except ValueError:
+            await self.sendError(textChannel, "Couldn't parse that number, sorry")
+            return
+
+        if index < 0 or index > len(self.audio_queue) - 1:
+            await self.sendError(textChannel, "Number not valid, needs to correspond to queue item")
+
+        
+        title = self.audio_queue[index].get('data').get('title')
+        del self.audio_queue[index]
+
+        await self.sendError(textChannel, "Removed {} at positon {}".format(title, index))
+
+
+    ## internals
+
+    async def set_playing(self, playing, status):
+        self.is_playing = playing;
+        if playing:
+            game = discord.Game(status)
+            await self.client.change_presence(status=discord.Status.online, activity=game)
+        else:
+            game = discord.CustomActivity("vibin")
+            await self.client.change_presence(status=discord.Status.idle, activity=game)
+
     def string_queue_item(self, item):
         data = item.get('data')
         ty_res = time.gmtime(data.get('duration'))
         res = time.strftime("%H:%M:%S",ty_res)
         return data.get('title') + ', Length: ' + res
 
+    async def sendError(self, textChannel, message):
+        if textChannel is not None:
+            await textChannel.send(message)
+            print (message)
+        else: 
+            print ("error! no text channel to send response: {}".format(message))
 
 
-    ## internals
 
     async def nextSong(self):
         if len(self.audio_queue) > 0:
-            await self.play(voiceChannel=None)
+            await self.play(textChannel=None, voiceChannel=None)
 
 
     def donePlaying(self, error):
@@ -139,8 +267,8 @@ class MusicPlayer:
 
         #play the next song
         self.currently_playing = None
-        self.playing = False
 
+        #fancy way of calling nextsong and disconnectvoice from non-async function
         coro = self.nextSong()
         fut = asyncio.run_coroutine_threadsafe(coro, self.client.loop)
         try:
@@ -150,7 +278,7 @@ class MusicPlayer:
             print("playing next song coroutine failed: {}".format(e.message))
             pass
 
-        if not self.playing:
+        if not self.is_playing:
             # if there's nothing to play, disconnect from voice
             coro2 = self.disconnectVoice()
             fut2 = asyncio.run_coroutine_threadsafe(coro2, self.client.loop)
@@ -161,13 +289,22 @@ class MusicPlayer:
                 print("song disconnect coroutine failed: {}".format(e.message))
                 pass
 
+        coro3 = self.set_playing(False, status=None)
+        fut3 = asyncio.run_coroutine_threadsafe(coro3, self.client.loop)
+        try:
+            fut2.result()
+        except Exception as e:
+            # an error happened sending the message
+            print("song staus change coroutine failed: {}".format(e.message))
+            pass
+
     # gets called after a song is done playing, maybe because of an error 
 
     async def joinVoice(self, voiceChannel):
-        self.voiceClient = await voiceChannel.connect();
+        self.voice_client = await voiceChannel.connect();
 
     async def disconnectVoice(self):
         for voiceClient in self.client.voice_clients:
             await voiceClient.disconnect();
-        self.voiceClient = None
-        self.playing = False
+        self.voice_client = None
+        await self.set_playing(False, status=None)

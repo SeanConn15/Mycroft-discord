@@ -204,7 +204,7 @@ async def on_message(m):
         await getWaifu(m)
     elif (content[0] == "add"):
         if len(content) < 2:
-            await m.channel.send("no song requested")
+            await mp.add("https://www.youtube.com/watch?v=CsGYh8AacgY", m.channel)
             return
         await mp.add(content[1], m.channel)
     elif (content[0] == "play"):
@@ -212,10 +212,19 @@ async def on_message(m):
             vc = m.author.voice.channel
         else:
             vc = None
-
-        await mp.play(voiceChannel = vc)
+        await mp.play(vc, m.channel)
+    elif (content[0] == "pause"):
+        await mp.pause(m.channel)
     elif(content[0] == "queue"):
         await mp.getQueue(m.channel)
+    elif (content[0] == "volume"):
+        await mp.setVolume(content[1], m.channel)
+    elif (content[0] == "clear"):
+        await mp.clear(m.channel)
+    elif (content[0] == "remove"):
+        await mp.remove(content[1], m.channel)
+    elif (content[0] == "stop"):
+        await mp.stop()
     elif (content[0] == "disconnect"):
         await mp.disconnectVoice()
 
