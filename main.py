@@ -35,10 +35,13 @@ admin = 0
 helpmessage = "\nTo talk to mycroft, use \"{} <command> [arguments]\".\n".format(keyword) + \
                 "Here are some of the things you do with mycroft:\n" + \
               "hello: have mycroft say hello\n" + \
+              "add: add a song to the queue" + \
+              "play: start playing the queue" + \
+              "disconnect: leave voice, stop playing music" + \
+              "queue: print out the music queue" + \
               "meme <name>: print out image \"name\", if already saved.\n" + \
               "save [name]: save an attached image as a meme, to be accessed by name\n" + \
               "list:        list available meme names\n" + \
-              "waifu:       get the perfect waifu, every time.\n" + \
               "https://github.com/SeanConn15/Mycroft-discord"
 
 
