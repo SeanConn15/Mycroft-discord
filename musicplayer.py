@@ -2,6 +2,7 @@
 import discord
 import asyncio
 import youtube_dl
+import time
 ### Music related things
 #TODO: basic music playing
     #TODO: get it to play one thing from youtube
@@ -83,7 +84,7 @@ class MusicPlayer:
     #async def leave():
     #    # pause and disconnect
 
-    async def add(self, url):
+    async def add(self, url, textChannel):
         # add something to the queue
         #stop playing whatever was playing
         loop = asyncio.get_event_loop()
@@ -100,6 +101,30 @@ class MusicPlayer:
 
         self.audio_queue.append({
             'data': data})
+        await textChannel.send("Added: {}. Position in queue: {}".format(
+            self.string_queue_item(self.audio_queue[len(self.audio_queue)-1]), 
+            len(self.audio_queue) - 1))
+
+    async def getQueue(self, textChannel):
+        ret = ''
+        if len(self.audio_queue) == 0:
+            ret += "No items in queue."
+        else:
+            i = 0
+            for item in self.audio_queue:
+                ret += str(i) + ': '
+                ret += self.string_queue_item(item)
+                ret += '\n'
+                i += 1
+        await textChannel.send(ret);
+
+    def string_queue_item(self, item):
+        data = item.get('data')
+        ty_res = time.gmtime(data.get('duration'))
+        res = time.strftime("%H:%M:%S",ty_res)
+        return data.get('title') + ', Length: ' + res
+
+
 
     ## internals
 

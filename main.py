@@ -203,7 +203,7 @@ async def on_message(m):
         if len(content) < 2:
             await m.channel.send("no song requested")
             return
-        await mp.add(url = content[1])
+        await mp.add(content[1], m.channel)
     elif (content[0] == "play"):
         if m.author.voice:
             vc = m.author.voice.channel
@@ -211,9 +211,10 @@ async def on_message(m):
             vc = None
 
         await mp.play(voiceChannel = vc)
-
+    elif(content[0] == "queue"):
+        await mp.getQueue(m.channel)
     elif (content[0] == "disconnect"):
-        await mp.disconnectVoice();
+        await mp.disconnectVoice()
 
 
 
