@@ -74,7 +74,7 @@ class MusicPlayer:
 
 
     ### commands
-    async def playnow(self, url, textChannel):
+    async def playnow(self, url, textChannel, voiceChannel=None):
         #make sure the url is good
         data = await self.parseUrl(url)
         if data is None:
@@ -85,7 +85,7 @@ class MusicPlayer:
         await self.stop()
         #play the requested song
         await self.addAt(0, url, textChannel)
-        await self.play()
+        await self.play(textChannel=textChannel, voiceChannel=voiceChannel)
 
     # put the current song back in the queue and stop playing
     async def stop(self):
@@ -198,8 +198,16 @@ class MusicPlayer:
         else:
             await self.addAt(len(self.audio_queue) - 1, url, textChannel)
 
+    async def next(self, textChannel):
+        #stop the current song
+        await self.stop()
+        #remove the entry added to the front
+        await self.remove(0, textChannel)
+        #play
+        await self.play(textChannel=textChannel)
+
     async def getQueue(self, textChannel):
-        ret = ''
+        ret = ' \n'
         if self.currently_playing is not None:
             if self.is_playing:
                 ret += "Currently Playing: " + self.string_queue_item(self.currently_playing) + "\n"

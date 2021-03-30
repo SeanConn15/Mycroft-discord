@@ -37,21 +37,30 @@ _helpmessage = ["",
                 "Here are some of the things you do with mycroft:", 
                 "```",
                 "Music:", 
-                "  add [youtube url]: add a song to the queue",
-                "  play: start playing the queue",
-                "  disconnect: leave voice, stop playing music",
-                "  queue: print out the music queue",
-                "  playnow [youtube url]: stop whatever is playing and play this",
-                "  clear: clear the music queue", 
-                "  remove [index]: remove song at [index] from queue", 
+                "add [youtube url]: add a song to the queue",
+                "play: start playing the queue",
+                "pause: stop playing music, resume with play",
+                "disconnect: leave voice, stop playing music",
+                "queue: print out the music queue",
+                "playnow [youtube url]: stop whatever is playing and play this",
+                "clear: clear the music queue", 
+                "remove [index]: remove song at [index] from queue", 
                 "```",
                 "```",
                 "Misc:", 
-                "  hello: have mycroft say hello", 
-                "  meme <name>: print out image \"name\", if already saved.", 
-                "  save [name]: save an attached image as a meme, to be accessed by name", 
-                "  list:        list available meme names", 
+                "hello: have mycroft say hello", 
+                "meme <name>: print out image \"name\", if already saved.", 
+                "save [name]: save an attached image as a meme, to be accessed by name", 
+                "list:        list available meme names", 
                 "```",
+                "```",
+                "To be added:",
+                "ranges for removing stuff",
+                "youtube playlist support",
+                "saving playlists",
+                "fancier looking output",
+                "undo/redo for queue actions",
+                "",
                 "https://github.com/SeanConn15/Mycroft-discord"]
 
 helpmessage = ""
@@ -146,11 +155,6 @@ async def on_ready():
 @client.event
 async def on_message(m):
 
-    ## TODO: remove after testing
-    if (m.author.id != admin):
-        dprint("not admin")
-        return
-
     global keyword
 
     ## Determining if message should be ignored
@@ -224,13 +228,22 @@ async def on_message(m):
             await mp.add("https://www.youtube.com/watch?v=CsGYh8AacgY", m.channel)
             return
         await mp.add(content[1], m.channel)
+    elif (content[0] == "addat"):
+        if len(content) < 2:
+            await m.channel.send("playnow needs a song to add")
+            return
+        await mp.addAt(content[1], content[2],  m.channel)
     elif (content[0] == "playnow"):
         if len(content) < 2:
             await m.channel.send("playnow needs a song to play")
             return
-        await mp.playnow(content[1], m.channel)
+        if m.author.voice is not None:
+            vc = m.author.voice.channel
+        else:
+            vc = None
+        await mp.playnow(content[1], m.channel, vc)
     elif (content[0] == "play"):
-        if m.author.voice:
+        if m.author.voice is not None:
             vc = m.author.voice.channel
         else:
             vc = None
@@ -248,7 +261,9 @@ async def on_message(m):
     elif (content[0] == "stop"):
         await mp.stop()
     elif (content[0] == "disconnect"):
-        await mp.disconnectVoice()
+        await mp.stop()
+    else:
+        await m.channel.send("I didn't understand that command, sorry.")
 
 
 
