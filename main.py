@@ -32,18 +32,31 @@ print ('Initializing stuff')
 keyword = "m-"
 # set during initalization, the admin's unique id
 admin = 0
-helpmessage = "\nTo talk to mycroft, use \"{} <command> [arguments]\".\n".format(keyword) + \
-                "Here are some of the things you do with mycroft:\n" + \
-              "hello: have mycroft say hello\n" + \
-              "add: add a song to the queue" + \
-              "play: start playing the queue" + \
-              "disconnect: leave voice, stop playing music" + \
-              "queue: print out the music queue" + \
-              "meme <name>: print out image \"name\", if already saved.\n" + \
-              "save [name]: save an attached image as a meme, to be accessed by name\n" + \
-              "list:        list available meme names\n" + \
-              "https://github.com/SeanConn15/Mycroft-discord"
+_helpmessage = ["",
+                "To talk to mycroft, use `{} <command> [arguments]`.\n".format(keyword) + \
+                "Here are some of the things you do with mycroft:", 
+                "```",
+                "Music:", 
+                "  add [youtube url]: add a song to the queue",
+                "  play: start playing the queue",
+                "  disconnect: leave voice, stop playing music",
+                "  queue: print out the music queue",
+                "  playnow [youtube url]: stop whatever is playing and play this",
+                "  clear: clear the music queue", 
+                "  remove [index]: remove song at [index] from queue", 
+                "```",
+                "```",
+                "Misc:", 
+                "  hello: have mycroft say hello", 
+                "  meme <name>: print out image \"name\", if already saved.", 
+                "  save [name]: save an attached image as a meme, to be accessed by name", 
+                "  list:        list available meme names", 
+                "```",
+                "https://github.com/SeanConn15/Mycroft-discord"]
 
+helpmessage = ""
+for line in _helpmessage:
+    helpmessage += line + '\n'
 
 # setting debug flag
 # changes what output is printed, and changes
@@ -88,10 +101,14 @@ class MycroftClient(discord.Client):
                  global browser
                  interruptRecieved = False
                  print ("Interrupt Recieved: disconnecting...")
+                 #if using a musicbot, disconnect it
+                 if mp is not None:
+                     await mp.stop()
+                 await client.change_presence(status=discord.Status.offline) 
                  await client.close()
                  print ("disconnected.")
                  #also stop the web browser
-                 if browser:
+                 if browser is not None:
                      browser.close()
 
 
@@ -183,7 +200,7 @@ async def on_message(m):
 
 
     if (content[0] == "help"):
-       await m.author.send(helpmessage)
+       await m.channel.send(helpmessage)
     elif (content[0] == "test"):
         if (random.randint(0,1) == 1):
             await m.channel.send("boop")
@@ -207,6 +224,11 @@ async def on_message(m):
             await mp.add("https://www.youtube.com/watch?v=CsGYh8AacgY", m.channel)
             return
         await mp.add(content[1], m.channel)
+    elif (content[0] == "playnow"):
+        if len(content) < 2:
+            await m.channel.send("playnow needs a song to play")
+            return
+        await mp.playnow(content[1], m.channel)
     elif (content[0] == "play"):
         if m.author.voice:
             vc = m.author.voice.channel
@@ -405,7 +427,7 @@ tfile.close();
 #options = Options()
 #options.headless = True
 #browser = webdriver.Firefox(options=options)
-
+browser = None
 
 
 # creating music player
