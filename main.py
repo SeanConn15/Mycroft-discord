@@ -24,6 +24,7 @@ import urllib.parse
 #TODO: make dprint append to a file, for debugging (add time and stuff)
 #TODO: compute how long commands take
 #TODO: better logging using module
+#TODO: deleting memes
 
 
 
@@ -52,6 +53,7 @@ _helpmessage = ["",
                 "meme <name>: print out image \"name\", if already saved.", 
                 "save [name]: save an attached image as a meme, to be accessed by name", 
                 "list:        list available meme names", 
+                "delete [name]: deletes the meme 'name'",
                 "```",
                 "```",
                 "To be added:",
@@ -219,6 +221,8 @@ async def on_message(m):
         await getMeme(m, content)     
     elif (content[0] == "save"):
         await saveMeme(m, content)     
+    elif (content[0] == "delete"):
+        await deleteMeme(m, content)
     elif (content[0] == "list"):
         await printMemes(m)
     elif (content[0] == "waifu"):
@@ -294,15 +298,23 @@ async def getMeme(message, content):
         filename += s + '_'
     # remove last underscore and add filetype
     filename = filename[:-1]
+    filename_gif = filename + ".gif"
     filename += ".png"
-    ## try to find the file
+    ## try to find the image file
     df = ""
     try:
         df = discord.File(fp="memes/" + filename,filename=filename)
     except IOError:
         dprint("Tried to open file: memes/{}, failed.".format(filename))
-        await message.channel.send("I couldn't find that image.")
-        return
+        # if that doesn't work try the gif
+        df = ""
+        try:
+            df = discord.File(fp="memes/" + filename_gif,filename=filename_gif)
+        except IOError:
+            dprint("Tried to open file: memes/{}, failed.".format(filename_gif))
+            # if that doesn't work try the gif
+            await message.channel.send("I couldn't find that image.")
+            return
 
     ##post the file
     await message.channel.send(content=None, file=df)
@@ -327,18 +339,28 @@ async def saveMeme(message, content):
         filename += s + '_'
     # remove last underscore and add filetype
     filename = filename[:-1]
-    filename += ".png"
 
     ## validate filename
     
     # if the file already exists tell them to try another filename
-    # TODO: dont make them reupload the image
-    if (os.path.isfile("memes/" + filename)):
+    if (os.path.isfile("memes/" + filename + ".gif")):
         await message.channel.send("That name is already in use, try another")
         return
 
-    #if it is not a png file, convert then save it
-    if message.attachments[0].filename[-4:] != ".png":
+    if (os.path.isfile("memes/" + filename + ".png")):
+        await message.channel.send("That name is already in use, try another")
+        return
+
+    #if file is a gif save it as one, otherwise png
+    if message.attachments[0].filename[-4:] == ".gif":
+        filename += ".gif"
+    else:
+        filename += ".png"
+
+
+
+    #if it is not a png or gif file, convert then save it
+    if message.attachments[0].filename[-4:] != ".png" and message.attachments[0].filename[-4:] != ".gif":
         # temporarily save it
         await message.attachments[0].save("memes/TEMP-" + filename)
         try:
@@ -365,6 +387,30 @@ async def saveMeme(message, content):
     ## say you saved it
     #TODO: react with fuckkin saved if that emote exists
 
+async def deleteMeme(message, content):
+    ## get filename
+    # first word is meme
+    del content[0]
+    # concatinate everything with underscores in between
+    filename = ""
+    for s in content:
+        filename += s + '_'
+    # remove last underscore
+    filename = filename[:-1]
+
+    ## validate filename
+    
+    if (os.path.isfile("memes/" + filename + ".gif")):
+        os.remove("memes/" + filename + ".gif")
+        await message.channel.send("Deleted.")
+        return
+
+    if (os.path.isfile("memes/" + filename + ".png")):
+        os.remove("memes/" + filename + ".png")
+        await message.channel.send("Deleted.")
+        return
+
+    await message.channel.send("I couldn't find that meme.")
 
 async def printMemes(message):
     response = "Here's all my memes:\n"
