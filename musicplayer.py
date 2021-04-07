@@ -19,9 +19,9 @@ import time
         # clearing queue x
         # current status x
         # stop playing current song put back into queue
-        # 'play this now then continue'
-        # skip song
-        # have killing bot not leave things in weird state
+        # 'play this now then continue' x
+        # skip song x
+        # have killing bot not leave things in weird state x
     # advanced usage:
         # playlists as items not individual songs
         # saving playlists
@@ -246,7 +246,7 @@ class MusicPlayer:
         await textChannel.send("Volume set to {}".format(volume))
 
     async def clear(self, textChannel):
-        self.song_queue = []
+        self.audio_queue = []
         await textChannel.send("Song queue cleared.")
         
     async def remove(self, index, textChannel):
@@ -346,10 +346,10 @@ class MusicPlayer:
         coro3 = self.set_playing(False)
         fut3 = asyncio.run_coroutine_threadsafe(coro3, self.client.loop)
         try:
-            fut2.result()
+            fut3.result()
         except Exception as e:
             # an error happened sending the message
-            print("song staus change coroutine failed: {}".format(e.message))
+            print("song status change coroutine failed: {}".format(e.message))
             pass
 
     # gets called after a song is done playing, maybe because of an error 

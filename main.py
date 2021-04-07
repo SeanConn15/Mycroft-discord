@@ -24,7 +24,6 @@ import urllib.parse
 #TODO: make dprint append to a file, for debugging (add time and stuff)
 #TODO: compute how long commands take
 #TODO: better logging using module
-#TODO: deleting memes
 
 
 
@@ -167,12 +166,9 @@ async def on_message(m):
 
     if (m.channel.type == discord.ChannelType.private):
         dprint ("\n--DM Recieved--")
-    else:
-        dprint ("\n--Message Recieved--")
-
 
     # a list of the words in the message
-    content = m.content.split(' ')
+    content = m.content.split()
 
     #split messages that start with the prefix with no space
     if (len(content[0]) > len(keyword) and content[0][:len(keyword)] == keyword):
@@ -182,7 +178,6 @@ async def on_message(m):
         #remove the old first word
         content.remove(content[2])
 
-    dprint ("Recieved: [{}]".format(m.content))
 
    
 
@@ -191,6 +186,8 @@ async def on_message(m):
     if (content[0] != keyword and m.channel.type != discord.ChannelType.private):
         return
 
+    dprint ("Command: [{}]".format(m.content))
+
     # the keyword is not case sensitive
     content[0] = content[0].lower()
 
@@ -198,12 +195,10 @@ async def on_message(m):
 
     ## Parsing command
 
-
     # if the command is invoked with a keyword, remove it
     # this is so commands can be parsed the same even if they are in DM's
     if (content[0] == keyword):
         del content[0]
-
 
     if (content[0] == "help"):
        await m.channel.send(helpmessage)
@@ -234,7 +229,7 @@ async def on_message(m):
         await mp.add(content[1], m.channel)
     elif (content[0] == "addat"):
         if len(content) < 2:
-            await m.channel.send("playnow needs a song to add")
+            await m.channel.send("addat needs a song to add")
             return
         await mp.addAt(content[1], content[2],  m.channel)
     elif (content[0] == "playnow"):
@@ -265,7 +260,7 @@ async def on_message(m):
     elif (content[0] == "stop"):
         await mp.stop()
     elif (content[0] == "disconnect"):
-        await mp.stop()
+        await mp.disconnectVoice()
     else:
         await m.channel.send("I didn't understand that command, sorry.")
 
