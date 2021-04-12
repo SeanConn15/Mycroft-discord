@@ -1,6 +1,7 @@
 #!/bin/python3
 import discord
 import asyncio
+import youtube_dl
 import signal
 import sys, traceback
 import subprocess # for executing shell functions
@@ -261,6 +262,8 @@ async def on_message(m):
         await mp.stop()
     elif (content[0] == "disconnect"):
         await mp.disconnectVoice()
+    elif (content[0] == "next"):
+        await mp.next(m.channel)
     else:
         await m.channel.send("I didn't understand that command, sorry.")
 
@@ -488,7 +491,21 @@ browser = None
 
 # creating music player
 dprint("Making music player")
-mp = MusicPlayer(client);
+ytdl_format_options = {
+    'format': 'bestaudio/best',
+    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
+}
+ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+ytdl.add_default_info_extractors()
+mp = MusicPlayer(client, ytdl);
 
 # connecting to discord
 print('Making connections')

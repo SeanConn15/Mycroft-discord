@@ -35,49 +35,59 @@ import time
         # metrics
         # reorder command that takes [#,#,#,#,#]
 
+class MusicItem:
+        # { type = "single", data = {ydtl data} }
+        # or
+        # { type = "playlist", data = [{ydtl data}, {ydtl data}, ... ], title = "string" }
+        def __init__(self, data):
+            if data is None:
+                self.type = None
+                return
+            
+            #TODO: fancy playlist support
+
+            self.type = 'single'
+            self.title = data.get('title')
+            # set entries
+            self.data = data
+
 class MusicPlayer:
-    def __init__(self, client):
+    def __init__(self, client, ytdl):
         self.client = client;
-        self.ytdl_format_options = {
-            'format': 'bestaudio/best',
-            'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-            'restrictfilenames': True,
-            'noplaylist': True,
-            'nocheckcertificate': True,
-            'ignoreerrors': False,
-            'logtostderr': False,
-            'quiet': True,
-            'no_warnings': True,
-            'default_search': 'auto',
-            'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
-        }
         self.ffmpeg_options = {
             'options': '-vn'
         }
-        self.ytdl = youtube_dl.YoutubeDL(self.ytdl_format_options)
-        
+        self.ytdl = ytdl        
         # volume
         self.volume = 1.0
         # the volume transformer currently in use (used to change volume)
         self.player = None
 
-        # dictionary, data is a dictionary of video data including stream url
+
+        #list of MusicItem's
         self.audio_queue = []
 
         self.voice_client = None
         # is a song currently playing (false when paused)
-        self.is_playing = False
+        self.is_paused = False
+        # if the bot is manually stopped
+        self.is_stopped = False
 
         # song currently playing
         self.currently_playing = None
+
+        # text channel currently doing things in
+        self.text_channel = None
+        # voice channel currently playing
+        self.voice_channel = None
 
 
 
     ### commands
     async def playnow(self, url, textChannel, voiceChannel=None):
         #make sure the url is good
-        data = await self.parseUrl(url)
-        if data is None:
+        item = await self.parseUrl(url)
+        if item is None:
             textChannel.send("The url is not valid, can't play")
             return
 
@@ -98,6 +108,7 @@ class MusicPlayer:
         await self.set_playing(False)
         if self.voice_client is not None:
             self.voice_client.stop()
+        self.is_stopped = True;
 
     # unpause, or play first thing in queue
     async def play(self, voiceChannel=None, textChannel=None):
@@ -105,9 +116,9 @@ class MusicPlayer:
         # if playing anything
         if self.currently_playing is not None:
             #if paused, continue 
-            if not self.is_playing:
+            if self.is_paused:
                 self.voice_client.resume()
-                await self.set_playing(True, self.currently_playing.get('data').get('title'))
+                await self.set_playing(True, self.currently_playing.title)
                 return
             await self.sendError(textChannel, "already playing")
             return
@@ -117,6 +128,7 @@ class MusicPlayer:
             await self.sendError(textChannel, "Couldn't play, no songs added")
             return
            
+
         ## main bit
 
         # ensure connection to a voice channel
@@ -128,8 +140,8 @@ class MusicPlayer:
             await self.joinVoice(voiceChannel)
 
         # get data for song
-        data = self.audio_queue[0].get('data')
-        source = discord.FFmpegPCMAudio(data['url'], **self.ffmpeg_options)
+        item = self.audio_queue[0]
+        source = discord.FFmpegPCMAudio(item.data['url'], **self.ffmpeg_options)
         player = discord.PCMVolumeTransformer(source, self.volume)
         player.volume = self.volume
 
@@ -142,21 +154,23 @@ class MusicPlayer:
             source.cleanup()
 
         # if successful, update data
-        self.is_playing = True
-        self.currently_playing = { 'data': data }
+        if self.is_stopped:
+            self.is_stopped = False;
+        self.currently_playing = item
         self.player = player
         del self.audio_queue[0]
-        await self.set_playing(True, data.get('title'))
+        await self.set_playing(True, item.data.get('title'))
 
 
 
     async def pause(self, textChannel):
         # stop playback for now
-        if self.voice_client is None or not self.is_playing:
+        if self.voice_client is None or self.is_paused:
             self.sendError(textChannel, "Can't pause, not playing")
             return
 
         self.voice_client.pause();
+        self.is_paused = True;
         await self.set_playing(False)
 
     #async def leave():
@@ -170,23 +184,20 @@ class MusicPlayer:
             await self.sendError(textChannel, "Couldn't parse that number, sorry")
             return
 
-        if pos < 0 or (len(self.audio_queue) > 0 and pos > len(self.audio_queue) - 1):
+        if pos < 0 or (len(self.audio_queue) > 0 and pos > len(self.audio_queue)):
             await self.sendError(textChannel, "Number not valid, needs to correspond to queue item")
 
+        # if given metadata already
         # get metadata
-        data = await self.parseUrl(url)
-        if data is None:
+        songs = await self.parseUrl(url)
+        if songs[0] is None:
             await textChannel.send("Couldn't parse webpage. Can't play song.")
 
-
-        #if it's a playlist
-        if 'entries' in data:
-            # take first item from a playlist
-            data = data['entries'][0]
-
         # add metadata to queue
-        self.audio_queue.insert(pos, 
-                {'data': data})
+        i = 0
+        for song in songs:
+            self.audio_queue.insert(pos + i, song)
+            i += 1
 
         await textChannel.send("Added: {}. Position in queue: {}".format(
             self.string_queue_item(self.audio_queue[pos]), pos))
@@ -196,20 +207,20 @@ class MusicPlayer:
         if len(self.audio_queue) == 0:
             await self.addAt(0, url, textChannel)
         else:
-            await self.addAt(len(self.audio_queue) - 1, url, textChannel)
+            await self.addAt(len(self.audio_queue), url, textChannel)
 
     async def next(self, textChannel):
         #stop the current song
         await self.stop()
         #remove the entry added to the front
-        await self.remove(0, textChannel)
+        await self.remove(0)
         #play
         await self.play(textChannel=textChannel)
 
     async def getQueue(self, textChannel):
         ret = ' \n'
         if self.currently_playing is not None:
-            if self.is_playing:
+            if not self.is_paused:
                 ret += "Currently Playing: " + self.string_queue_item(self.currently_playing) + "\n"
             else:
                 ret += "Currently Playing: " + self.string_queue_item(self.currently_playing) + " (Paused)"  +  "\n"
@@ -249,7 +260,7 @@ class MusicPlayer:
         self.audio_queue = []
         await textChannel.send("Song queue cleared.")
         
-    async def remove(self, index, textChannel):
+    async def remove(self, index, textChannel = None):
         # check validity
         try:
             index = int(index)
@@ -261,7 +272,7 @@ class MusicPlayer:
             await self.sendError(textChannel, "Number not valid, needs to correspond to queue item")
 
         
-        title = self.audio_queue[index].get('data').get('title')
+        title = self.audio_queue[index].title
         del self.audio_queue[index]
 
         await self.sendError(textChannel, "Removed {} at positon {}".format(title, index))
@@ -270,7 +281,6 @@ class MusicPlayer:
     ## internals
 
     async def set_playing(self, playing, status=None):
-        self.is_playing = playing;
         if playing:
             game = discord.Game(status)
             await self.client.change_presence(status=discord.Status.online, activity=game)
@@ -279,10 +289,9 @@ class MusicPlayer:
             await self.client.change_presence(status=discord.Status.idle, activity=game)
 
     def string_queue_item(self, item):
-        data = item.get('data')
-        ty_res = time.gmtime(data.get('duration'))
+        ty_res = time.gmtime(item.data.get('duration'))
         res = time.strftime("%H:%M:%S",ty_res)
-        return data.get('title') + ', Length: ' + res
+        return item.data.get('title') + ', Length: ' + res
 
     async def sendError(self, textChannel, message):
         if textChannel is not None:
@@ -300,10 +309,15 @@ class MusicPlayer:
             data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=False))
         except:
             return None
-        if 'entries' in data:
-            data = data['entries'][0]
 
-        return data 
+        #make the MusicItem object
+        songs = []
+        if 'entries' in data:
+            for entry in data.get('entries'):
+                songs.append(MusicItem(entry))
+        else:
+            songs.append(MusicItem(data))
+        return songs
 
     async def nextSong(self):
         if len(self.audio_queue) > 0:
@@ -314,11 +328,14 @@ class MusicPlayer:
         if error:
             print("error in playing song: {}".format(error))
 
+        #if manually stopped don't do anything
+        if self.is_stopped:
+            return
         #play the next song
         self.currently_playing = None
 
         # if not playing (aka the bot manually is stopped)
-        if not self.is_playing:
+        if not self.is_paused:
             #dont play the next song
             return
 
@@ -332,7 +349,7 @@ class MusicPlayer:
             print("playing next song coroutine failed: {}".format(e.message))
             pass
 
-        if not self.is_playing:
+        if not self.is_paused:
             # if there's nothing to play, disconnect from voice
             coro2 = self.disconnectVoice()
             fut2 = asyncio.run_coroutine_threadsafe(coro2, self.client.loop)
