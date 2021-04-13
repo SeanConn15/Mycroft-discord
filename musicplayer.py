@@ -52,12 +52,15 @@ class MusicItem:
                 self.type = None
                 return
             
-            #TODO: fancy playlist support
-
-            self.type = 'single'
-            self.title = data.get('title')
-            # set entries
-            self.data = data
+            # playlist and single song support
+            if 'entries' in data:
+                self.type = "playlist"
+                self.title = data.get('title')
+                self.data = data.get('entries')
+            else:
+                self.type = 'single'
+                self.title = data.get('title')
+                self.data = data
 
 class MusicPlayer:
     def __init__(self, client, ytdl):
@@ -76,7 +79,8 @@ class MusicPlayer:
         self.audio_queue = []
 
         self.voice_client = None
-        # is a song currently playing (false when paused)
+
+        # is currently playing (false when paused)
         self.is_paused = False
         # if the bot is manually stopped
         self.is_stopped = False
@@ -307,7 +311,7 @@ class MusicPlayer:
 
     async def pause(self):
         # stop playback for now
-        if self.voice_client is None or self.is_paused:
+        if self.voice_client is None or self.is_paused or self.is_stopped:
             await self.text_channel.send("Can't pause, not playing")
             return
 
@@ -460,28 +464,26 @@ class MusicPlayer:
             songs.append(MusicItem(data))
         return songs
 
-    async def nextSong(self):
-        if len(self.audio_queue) > 0:
-            await self.play()
 
 
     def donePlaying(self, error):
         if error:
             print("error in playing song: {}".format(error))
 
-        #if manually stopped don't do anything
-        if self.is_stopped:
-            return
-        #play the next song
         self.currently_playing = None
 
-        # if not playing (aka the bot manually is stopped)
-        if not self.is_paused:
-            #dont play the next song
+        #if manually stopped or paused don't do anything
+        if self.is_stopped or self.is_paused:
             return
 
+        # if there are no more songs, don't do anything
+        if len(self.audio_queue) == 0:
+            return
+
+        #try to play the next song
+
         #fancy way of calling nextsong and disconnectvoice from non-async function
-        coro = self.nextSong()
+        coro = self.play()
         fut = asyncio.run_coroutine_threadsafe(coro, self.client.loop)
         try:
             fut.result()

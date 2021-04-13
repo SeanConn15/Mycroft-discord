@@ -123,7 +123,6 @@ class MycroftClient(discord.Client):
                  if browser is not None:
                      browser.close()
 
-
             # if on debug mode check every second
             if (debug):
                 await asyncio.sleep(1)
