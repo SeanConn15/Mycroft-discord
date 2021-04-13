@@ -35,6 +35,14 @@ import time
         # metrics
         # reorder command that takes [#,#,#,#,#]
 
+
+
+#TODO: seperate commands and member functions
+#TODO: text channel attachment
+    # follow
+        # follows both text and voice
+#TODO: voice channel attachment
+
 class MusicItem:
         # { type = "single", data = {ydtl data} }
         # or
@@ -84,18 +92,158 @@ class MusicPlayer:
 
 
     ### commands
-    async def playnow(self, url, textChannel, voiceChannel=None):
+
+    # playnow, stop, play, pause, add, next, queue, set_volume, clear, remove
+
+
+
+    async def command_play(self, textChannel, voiceChannel):
+        if not await self.ensureText(textChannel):
+            return
+
+        if not await self.ensureVoice(voiceChannel):
+            await self.text_channel.send("Couldn't play.")
+            return
+        await self.play()
+
+
+    async def command_playnow(self, url, textChannel, voiceChannel):
+        if not await self.ensureText(textChannel):
+            return
+        if not await self.ensureVoice(voiceChannel):
+            await self.text_channel.send("Couldn't play.")
+            return
+        await self.playnow(url)
+
+    async def command_pause(self, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.pause()
+
+    async def command_stop(self, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.stop()
+
+    async def command_add(self, url,  textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.add(url)
+
+
+    async def command_addAt(self, url, pos, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.addAt(url, pos)
+
+    async def command_getQueue(self, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.getQueue()
+
+    async def command_next(self, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        if not await self.ensureVoice(voiceChannel):
+            await self.text_channel.send("Couldn't skip, player error")
+            return
+        await self.next()
+
+    async def command_clear(self, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.clear()
+
+    async def command_remove(self, pos, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.remove(pos)
+
+    async def command_setVolume(self, vol, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.setVolume(vol)
+
+    async def command_follow(self, textChannel, voiceChannel):
+        await self.follow(textChannel, voiceChannel)
+
+    async def command_disconnectVoice(self, textChannel):
+        await self.ensureText(textChannel)
+        await self.disconnectVoice()
+
+    ### internals
+    async def follow(self, tc, vc):
+        if (tc == self.text_channel and vc == self.voice_channel):
+            await self.text_channel.send("Nothing to change, text and voice channel both identical.")
+        #if the text channel differs, change it and send a message
+        if (tc != self.text_channel):
+            self.text_channel = tc
+            await self.text_channel.send("Text channel changed.")
+        #if the voice channel differs, change it and send a messge
+        if (vc != self.voice_channel):
+            if not await self.ensureVoice(vc):
+                return
+
+    async def ensureVoice(self, voiceChannel):
+        # ensures that the bot will play in the channel selected
+        # returns false if the voice client fails for any reason
+
+        if voiceChannel is None:
+            return False
+
+
+        #if there is a mismatch between voice client and voice channel
+        if self.voice_channel is not None and self.voice_channel != voiceChannel:
+            #move to that channel
+            await self.voice_client.move_to(voiceChannel)
+            self.voice_channel = voiceChannel
+            await self.text_channel.send("Moved to new channel.")
+
+        #if there is no voice client already, make one
+        if self.voice_channel is None:
+            self.voice_client = await voiceChannel.connect();
+            if self.voice_client is None:
+                return False
+            self.voice_channel = voiceChannel
+            await self.text_channel.send("Voice channel set to {}".format(self.voice_channel.name))
+            return True
+
+                
+        # the voice channel is set correctly
+        if self.voice_channel == voiceChannel:
+            return True
+            
+
+    async def ensureText(self, textChannel):
+        # ensures that the bot's text channel and the request's text channel match
+        # if they don't, asks them to use the channel with the name or do follow
+        # returns false if there is a mismatch
+
+        if textChannel == self.text_channel:
+            return True
+
+        if self.text_channel is None:
+            self.text_channel = textChannel
+            await self.text_channel.send("Text channel set to {}.".format(self.text_channel.name))
+            return True
+
+
+        # implicitly a mismatch in the given channel and set channel
+        await textChannel.send("Commands currently accepted in the {} channel. Do 'follow' to switch this channel, or use that one.".format(self.text_channel.name))
+        return False
+
+    async def playnow(self, url):
         #make sure the url is good
         item = await self.parseUrl(url)
         if item is None:
-            textChannel.send("The url is not valid, can't play")
+            self.text_channel.send("The url is not valid, can't play")
             return
 
         #put what's currently playing back in the queue (if applicable)
         await self.stop()
         #play the requested song
-        await self.addAt(0, url, textChannel)
-        await self.play(textChannel=textChannel, voiceChannel=voiceChannel)
+        await self.addAt(0, url)
+        await self.play()
 
     # put the current song back in the queue and stop playing
     async def stop(self):
@@ -109,9 +257,10 @@ class MusicPlayer:
         if self.voice_client is not None:
             self.voice_client.stop()
         self.is_stopped = True;
+        await self.text_channel.send("Stopped.")
 
     # unpause, or play first thing in queue
-    async def play(self, voiceChannel=None, textChannel=None):
+    async def play(self):
         ## preconditions
         # if playing anything
         if self.currently_playing is not None:
@@ -119,25 +268,18 @@ class MusicPlayer:
             if self.is_paused:
                 self.voice_client.resume()
                 await self.set_playing(True, self.currently_playing.title)
+                self.is_paused = False
                 return
             await self.sendError(textChannel, "already playing")
             return
         
         # if there is not something in the queue
         if len(self.audio_queue) == 0:
-            await self.sendError(textChannel, "Couldn't play, no songs added")
+            await self.sendError(self.text_channel, "Couldn't play, no songs added")
             return
            
 
         ## main bit
-
-        # ensure connection to a voice channel
-        if self.voice_client is None:
-            # connect to the user's
-            if voiceChannel is None:
-                await self.sendError(textChannel, "Couldn't play, dont know where join.")
-                return
-            await self.joinVoice(voiceChannel)
 
         # get data for song
         item = self.audio_queue[0]
@@ -150,48 +292,47 @@ class MusicPlayer:
         if (self.voice_client):
             self.voice_client.play(player, after=self.donePlaying)
         else: 
-            await self.sendError(textChannel, "Couldn't play, no voice client")
+            await self.sendError(self.text_channel, "Couldn't play, no voice client")
             source.cleanup()
 
         # if successful, update data
         if self.is_stopped:
             self.is_stopped = False;
+
         self.currently_playing = item
         self.player = player
         del self.audio_queue[0]
         await self.set_playing(True, item.data.get('title'))
 
 
-
-    async def pause(self, textChannel):
+    async def pause(self):
         # stop playback for now
         if self.voice_client is None or self.is_paused:
-            self.sendError(textChannel, "Can't pause, not playing")
+            await self.text_channel.send("Can't pause, not playing")
             return
 
         self.voice_client.pause();
         self.is_paused = True;
         await self.set_playing(False)
+        await self.text_channel.send("Paused.")
 
-    #async def leave():
-    #    # pause and disconnect
 
-    async def addAt(self, pos, url, textChannel):
+    async def addAt(self, pos, url):
         # check validity of pos
         try:
             pos = int(pos)
         except ValueError:
-            await self.sendError(textChannel, "Couldn't parse that number, sorry")
+            await self.sendError(self.text_channel, "Couldn't parse that number, sorry")
             return
 
         if pos < 0 or (len(self.audio_queue) > 0 and pos > len(self.audio_queue)):
-            await self.sendError(textChannel, "Number not valid, needs to correspond to queue item")
+            await self.sendError(self.text_channel, "Number not valid, needs to correspond to queue item")
 
         # if given metadata already
         # get metadata
         songs = await self.parseUrl(url)
         if songs[0] is None:
-            await textChannel.send("Couldn't parse webpage. Can't play song.")
+            await self.text_channel.send("Couldn't parse webpage. Can't play song.")
 
         # add metadata to queue
         i = 0
@@ -199,15 +340,15 @@ class MusicPlayer:
             self.audio_queue.insert(pos + i, song)
             i += 1
 
-        await textChannel.send("Added: {}. Position in queue: {}".format(
+        await self.text_channel.send("Added: {}. Position in queue: {}".format(
             self.string_queue_item(self.audio_queue[pos]), pos))
         
 
-    async def add(self, url, textChannel):
+    async def add(self, url):
         if len(self.audio_queue) == 0:
-            await self.addAt(0, url, textChannel)
+            await self.addAt(0, url)
         else:
-            await self.addAt(len(self.audio_queue), url, textChannel)
+            await self.addAt(len(self.audio_queue), url)
 
     async def next(self, textChannel):
         #stop the current song
@@ -217,7 +358,7 @@ class MusicPlayer:
         #play
         await self.play(textChannel=textChannel)
 
-    async def getQueue(self, textChannel):
+    async def getQueue(self):
         ret = ' \n'
         if self.currently_playing is not None:
             if not self.is_paused:
@@ -236,7 +377,7 @@ class MusicPlayer:
                 ret += self.string_queue_item(item)
                 ret += '\n'
                 i += 1
-        await textChannel.send(ret);
+        await self.text_channel.send(ret);
 
     async def setVolume(self, volume, textChannel):
         # volume is a string, try to turn it into a float
@@ -256,26 +397,26 @@ class MusicPlayer:
             self.player.volume = self.volume
         await textChannel.send("Volume set to {}".format(volume))
 
-    async def clear(self, textChannel):
+    async def clear(self):
         self.audio_queue = []
-        await textChannel.send("Song queue cleared.")
+        await self.text_channel.send("Song queue cleared.")
         
-    async def remove(self, index, textChannel = None):
+    async def remove(self, index):
         # check validity
         try:
             index = int(index)
         except ValueError:
-            await self.sendError(textChannel, "Couldn't parse that number, sorry")
+            await self.text_channel.send("Couldn't parse that number, sorry")
             return
 
         if index < 0 or index > len(self.audio_queue) - 1:
-            await self.sendError(textChannel, "Number not valid, needs to correspond to queue item")
+            await self.text_channel.send("Number not valid, needs to correspond to queue item")
 
         
         title = self.audio_queue[index].title
         del self.audio_queue[index]
 
-        await self.sendError(textChannel, "Removed {} at positon {}".format(title, index))
+        await self.text_channel.send("Removed {} at positon {}".format(title, index))
 
 
     ## internals

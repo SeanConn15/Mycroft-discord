@@ -19,12 +19,11 @@ import urllib.parse
 #TODO: @me if there are issues with a command
 #TODO: if someone does the cozy reaction post it from the bot
 #TODO: make help better, command specific
-#TODO: improve waifu command, ownership etc
 #TODO: make admin only commands for controlling other things in the server
 
-#TODO: make dprint append to a file, for debugging (add time and stuff)
 #TODO: compute how long commands take
 #TODO: better logging using module
+
 
 
 
@@ -46,6 +45,8 @@ _helpmessage = ["",
                 "playnow [youtube url]: stop whatever is playing and play this",
                 "clear: clear the music queue", 
                 "remove [index]: remove song at [index] from queue", 
+                "next: play next song",
+                "follow: use this text channel, defaults to where first command is issued",
                 "```",
                 "```",
                 "Misc:", 
@@ -58,7 +59,7 @@ _helpmessage = ["",
                 "```",
                 "To be added:",
                 "ranges for removing stuff",
-                "youtube playlist support",
+                "better youtube playlist support",
                 "saving playlists",
                 "fancier looking output",
                 "undo/redo for queue actions",
@@ -171,6 +172,9 @@ async def on_message(m):
     # a list of the words in the message
     content = m.content.split()
 
+    if (len(content) < 1):
+        return
+
     #split messages that start with the prefix with no space
     if (len(content[0]) > len(keyword) and content[0][:len(keyword)] == keyword):
         #insert the two parts of the message
@@ -223,47 +227,54 @@ async def on_message(m):
         await printMemes(m)
     elif (content[0] == "waifu"):
         await getWaifu(m)
-    elif (content[0] == "add"):
-        if len(content) < 2:
-            await mp.add("https://www.youtube.com/watch?v=CsGYh8AacgY", m.channel)
-            return
-        await mp.add(content[1], m.channel)
-    elif (content[0] == "addat"):
-        if len(content) < 2:
-            await m.channel.send("addat needs a song to add")
-            return
-        await mp.addAt(content[1], content[2],  m.channel)
-    elif (content[0] == "playnow"):
-        if len(content) < 2:
-            await m.channel.send("playnow needs a song to play")
-            return
-        if m.author.voice is not None:
-            vc = m.author.voice.channel
-        else:
-            vc = None
-        await mp.playnow(content[1], m.channel, vc)
-    elif (content[0] == "play"):
-        if m.author.voice is not None:
-            vc = m.author.voice.channel
-        else:
-            vc = None
-        await mp.play(vc, m.channel)
-    elif (content[0] == "pause"):
-        await mp.pause(m.channel)
-    elif(content[0] == "queue"):
-        await mp.getQueue(m.channel)
-    elif (content[0] == "volume"):
-        await mp.setVolume(content[1], m.channel)
-    elif (content[0] == "clear"):
-        await mp.clear(m.channel)
-    elif (content[0] == "remove"):
-        await mp.remove(content[1], m.channel)
-    elif (content[0] == "stop"):
-        await mp.stop()
-    elif (content[0] == "disconnect"):
-        await mp.disconnectVoice()
-    elif (content[0] == "next"):
-        await mp.next(m.channel)
+    elif mp is not None:
+        if (content[0] == "add"):
+            if len(content) < 2:
+                await mp.command_add("https://www.youtube.com/watch?v=CsGYh8AacgY", m.channel)
+                return
+            await mp.command_add(content[1], m.channel)
+        elif (content[0] == "addat"):
+            if len(content) < 2:
+                await m.channel.send("addat needs a song to add")
+                return
+            await mp.command_addAt(content[1], content[2],  m.channel)
+        elif (content[0] == "playnow"):
+            if len(content) < 2:
+                await m.channel.send("playnow needs a song to play")
+                return
+            if m.author.voice is not None:
+                vc = m.author.voice.channel
+            else:
+                vc = None
+            await mp.command_playnow(content[1], m.channel, vc)
+        elif (content[0] == "play"):
+            if m.author.voice is not None:
+                vc = m.author.voice.channel
+            else:
+                vc = None
+            await mp.command_play(m.channel, vc)
+        elif (content[0] == "pause"):
+            await mp.command_pause(m.channel)
+        elif(content[0] == "queue"):
+            await mp.command_getQueue(m.channel)
+        elif (content[0] == "volume"):
+            await mp.command_setVolume(content[1], m.channel)
+        elif (content[0] == "clear"):
+            await mp.command_clear(m.channel)
+        elif (content[0] == "remove"):
+            await mp.command_remove(content[1], m.channel)
+        elif (content[0] == "stop"):
+            await mp.command_stop(m.channel)
+        elif (content[0] == "disconnect"):
+            await mp.command_disconnectVoice(m.channel)
+        elif (content[0] == "next"):
+            await mp.command_next(m.channel)
+        elif (content[0] == "follow"):
+            if m.author.voice is not None:
+                vc = m.author.voice.channel
+            else:
+                vc = None
+            await mp.command_follow(m.channel, vc)
     else:
         await m.channel.send("I didn't understand that command, sorry.")
 
