@@ -8,8 +8,10 @@ import subprocess # for executing shell functions
 import time
 import os
 import random
+import logging
 from musicplayer import MusicPlayer
 from PIL import Image # for basic image processing
+
 
 # for web scraping
 from selenium import webdriver
@@ -28,7 +30,7 @@ import urllib.parse
 
 
 ############# Initializations ############# 
-print ('Initializing stuff')
+logging.info('Initializing stuff')
 keyword = "m-"
 # set during initalization, the admin's unique id
 admin = 0
@@ -39,21 +41,23 @@ _helpmessage = ["",
                 "Music:", 
                 "add [youtube url]: add a song to the queue",
                 "play: start playing the queue",
+                "play [youtube url]: stop whatever is playing and play this",
+                "playnow [youtube url]: same as above",
                 "pause: stop playing music, resume with play",
-                "disconnect: leave voice, stop playing music",
+                "stop: leave voice, stop playing music",
                 "queue: print out the music queue",
-                "playnow [youtube url]: stop whatever is playing and play this",
                 "clear: clear the music queue", 
                 "remove [index]: remove song at [index] from queue", 
                 "next: play next song",
-                "follow: use this text channel, defaults to where first command is issued",
+                "follow: use this text/voice channel, defaults to where first command is issued",
                 "```",
                 "```",
                 "Misc:", 
                 "hello: have mycroft say hello", 
                 "meme <name>: print out image \"name\", if already saved.", 
                 "save [name]: save an attached image as a meme, to be accessed by name", 
-                "list:        list available meme names", 
+                "list: list available meme names", 
+                "test: super secret command, for testing puposes",
                 "delete [name]: deletes the meme 'name'",
                 "```",
                 "```",
@@ -70,23 +74,34 @@ helpmessage = ""
 for line in _helpmessage:
     helpmessage += line + '\n'
 
+
+
+
 # setting debug flag
-# changes what output is printed, and changes
+# changes what output is logged, and changes
 # various things for quick stopping and starting
 debug = True
 if len(sys.argv) > 1:
     if sys.argv[1] == "d":
         debug = True
+    else:
+        print ("usage: ./main.py [d]\n\td: turn on debug output to log")
+        sys.exit(0)
 
+# logging 
+# TODO: make this work better
+logger = logging.getLogger('discord')
 
+# log everything to the file
+filehandler = logging.FileHandler(filename='logs/discord.log', encoding='utf-8')
+filehandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 
-# debug function
-# if not debug_needed, prints string
-# otherwise prints string iff debug is set
-def dprint(str):
-    if(debug):
-        print (str)
+# only print out warnings
+texthandler = logging.StreamHandler()
+texthandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 
+logger.addHandler(filehandler)
+logger.addHandler(texthandler)
 
 ## global variables
 # set to True if an unhandled intrrupt signal is recieved
@@ -112,13 +127,13 @@ class MycroftClient(discord.Client):
             if (interruptRecieved):
                  global browser
                  interruptRecieved = False
-                 print ("Interrupt Recieved: disconnecting...")
+                 logging.info("Interrupt Recieved: disconnecting...")
                  #if using a musicbot, disconnect it
                  if mp is not None:
                      await mp.stop()
                  await client.change_presence(status=discord.Status.offline) 
                  await client.close()
-                 print ("disconnected.")
+                 logging.info("disconnected.")
                  #also stop the web browser
                  if browser is not None:
                      browser.close()
@@ -136,7 +151,7 @@ client = MycroftClient();
 ############# Local Input        #############
 
 def disconnect():
-    dprint ("SIGINT Recieved, setting variable")
+    logging.info("SIGINT Recieved, setting variable")
     global interruptRecieved 
     interruptRecieved = True
 
@@ -144,8 +159,8 @@ def disconnect():
 ############# Asynchronus Events ############# 
 @client.event
 async def on_ready():
-    print ("Connection established.")
-    dprint ("Authenicated as {}".format(client.user.name))
+    logging.info("Connection established.")
+    logging.info("Authenicated as {}".format(client.user.name))
 
     # register the CTRL+C signal handler to stop the bot, sets a variable in disconnect() that
     # an asnchronous event checks
@@ -166,7 +181,7 @@ async def on_message(m):
         return
 
     if (m.channel.type == discord.ChannelType.private):
-        dprint ("\n--DM Recieved--")
+        logging.info("\n--DM Recieved--")
 
     # a list of the words in the message
     content = m.content.split()
@@ -190,7 +205,7 @@ async def on_message(m):
     if (content[0] != keyword and m.channel.type != discord.ChannelType.private):
         return
 
-    dprint ("Command: [{}]".format(m.content))
+    logging.info("Command: [{}]".format(m.content))
 
     # the keyword is not case sensitive
     content[0] = content[0].lower()
@@ -237,7 +252,8 @@ async def on_message(m):
                 await m.channel.send("addat needs a song to add")
                 return
             await mp.command_addAt(content[1], content[2],  m.channel)
-        elif (content[0] == "playnow"):
+        elif (content[0] == "playnow" or ( content[0] == "play" and len(content) >1)):
+            # ^ play [url] calls playnow
             if len(content) < 2:
                 await m.channel.send("playnow needs a song to play")
                 return
@@ -264,10 +280,12 @@ async def on_message(m):
             await mp.command_remove(content[1], m.channel)
         elif (content[0] == "stop"):
             await mp.command_stop(m.channel)
-        elif (content[0] == "disconnect"):
-            await mp.command_disconnectVoice(m.channel)
         elif (content[0] == "next"):
-            await mp.command_next(m.channel)
+            if m.author.voice is not None:
+                vc = m.author.voice.channel
+            else:
+                vc = None
+            await mp.command_next(m.channel, vc)
         elif (content[0] == "follow"):
             if m.author.voice is not None:
                 vc = m.author.voice.channel
@@ -286,7 +304,7 @@ async def on_message(m):
 
             await m.channel.send("The IP of the server is: {}".format(response.stdout))
 
-    dprint("-- command execution complete --")
+    logging.info("-- command execution complete --")
     
 ########## misc functions #########
 
@@ -313,13 +331,13 @@ async def getMeme(message, content):
     try:
         df = discord.File(fp="memes/" + filename,filename=filename)
     except IOError:
-        dprint("Tried to open file: memes/{}, failed.".format(filename))
+        logging.error("Tried to open file: memes/{}, failed.".format(filename))
         # if that doesn't work try the gif
         df = ""
         try:
             df = discord.File(fp="memes/" + filename_gif,filename=filename_gif)
         except IOError:
-            dprint("Tried to open file: memes/{}, failed.".format(filename_gif))
+            logging.error("Tried to open file: memes/{}, failed.".format(filename_gif))
             # if that doesn't work try the gif
             await message.channel.send("I couldn't find that image.")
             return
@@ -374,7 +392,7 @@ async def saveMeme(message, content):
         try:
             im = Image.open("memes/TEMP-" + filename)
         except IOError:
-            print ("image failed to save: memes/TEMP-" + filename)
+            logging.error("image failed to save: memes/TEMP-" + filename)
             await message.channel.send("it didnt work, image failed to save")
             return
         # convert it and save it
@@ -446,12 +464,10 @@ async def getWaifu(message):
     #click the images button
     browser.find_element_by_class_name('js-zci-link--images').click() 
 
-    #print(browser.title)
     images = browser.find_elements_by_class_name('tile--img__img')
-    #print(len(images))
     if (len(images) == 0):
-        dprint("no images found in web scrape!!!")
-        dprint("HTML------------------\n\n{}\n\n-----------------".format(browser.page_source))
+        logging.error("no images found in web scrape!!!")
+        logging.error("HTML------------------\n\n{}\n\n-----------------".format(browser.page_source))
         return
 
     waifu_link = images[random.randint(0, len(images) - 1)]
@@ -466,7 +482,7 @@ async def getWaifu(message):
     try:
         df = discord.File(fp="./tempWaifu.jpg",filename="best_waifu.jpg")
     except IOError:
-        dprint("Tried to open a saved waifu image and failed")
+        logging.error("Tried to open a saved waifu image and failed")
         return
 
 
@@ -482,7 +498,7 @@ async def getWaifu(message):
 
 
 # reading from startup files
-print ('Reading files for information on things')
+logging.info('Reading files for information on things')
 # getting the token from the .secrets file
 tfile = open('secrets', 'r+', 1)
 token = tfile.readline();  
@@ -491,7 +507,7 @@ admin = tfile.readline();
 admin = int(admin[:-1])
 tfile.close();
 
-#dprint ('Starting the browser')
+#logging.info('Starting the browser')
 #
 #options = Options()
 #options.headless = True
@@ -500,7 +516,7 @@ browser = None
 
 
 # creating music player
-dprint("Making music player")
+logging.info("Making music player")
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -518,5 +534,5 @@ ytdl.add_default_info_extractors()
 mp = MusicPlayer(client, ytdl);
 
 # connecting to discord
-print('Making connections')
+logging.info('Making connections')
 client.run(token)

@@ -70,6 +70,7 @@ class MusicPlayerTest(IsolatedAsyncioTestCase):
         self.assertEqual(self.player.text_channel,  self.textChannel)
         assert self.textChannel.send.called
         # make sure the player had play called
+        assert self.player.voice_client is not None
         assert self.player.voice_client.play.called
 
 
@@ -103,7 +104,7 @@ class MusicPlayerTest(IsolatedAsyncioTestCase):
 
         #check that pause was called in the player, and the member is set
         assert self.player.voice_client.pause.called
-        assert self.player.is_paused
+        self.assertEqual(self.player.state, "paused")
 
     async def test_stop(self):
         #add and play a song
@@ -113,8 +114,39 @@ class MusicPlayerTest(IsolatedAsyncioTestCase):
         #stop
         await self.player.command_stop(self.textChannel)
         #check that pause was called in the player, and the member is set
-        assert self.player.voice_client.stop.called
+        assert self.player.voice_client is None
         assert self.player.currently_playing is None
+
+    async def test_playnow(self):
+        # add some songs and start playing
+        await self.player.command_add("test url", self.textChannel)
+        await self.player.command_add("test url", self.textChannel)
+        await self.player.command_play(self.textChannel, self.voiceChannel)
+
+        # try to play this song now
+        data2 = { 'url': 'http://mock.url',
+                'title': 'Mock Youtube Video 2' }
+        self.ytdl.extract_info.return_value = data2
+
+        await self.player.command_playnow("test url", self.textChannel, self.voiceChannel)
+
+        # verify its playing
+        self.assertEqual( data2.get('title'), self.player.currently_playing.title)
+        assert self.player.voice_client is not None
+        self.assertEqual(self.player.state, "playing")
+
+    async def test_two_playnows(self):
+
+        await self.player.command_playnow("test url", self.textChannel, self.voiceChannel)
+        await self.player.command_playnow("test url", self.textChannel, self.voiceChannel)
+
+        # verify its playing
+        assert self.player.currently_playing is not None
+        assert self.player.voice_client is not None
+        self.assertEqual(self.player.state, "playing")
+    #async def test_queue(self):
+
+    #async def test_queue_splitting(self):
 
 ############ Testing errors
 

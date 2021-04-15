@@ -2,3 +2,4 @@ secrets
 users
 memes
 *.log
+./log/*
