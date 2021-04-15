@@ -1,2 +1,3 @@
-A discord bot that saves images to the server with a name, so they can be called by that name in the future.
-It coverts all given images to JPG and does basic compression on them, filenames can have spaces and are not case sensitive.
+# Mycroft Discord Bot
+Currently has a couple misc commands, and a music bot feature that uses youtubedl.
+Lots of changes to come.
