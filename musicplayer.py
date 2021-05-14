@@ -2,6 +2,7 @@
 import discord
 import asyncio
 import youtube_dl
+import logging
 import time
 ### Music related things
 #TODO: basic music playing
@@ -23,8 +24,12 @@ import time
         # skip song x
         # have killing bot not leave things in weird state x
     # advanced usage:
-        # playlists as items not individual songs
+        # playlists as items not individual songs (not doing)
         # saving playlists
+            # saving playlist to file
+                # naming playlist
+            # loading playlist
+
         # fancier output
         # typing when thinking
         # DM's when commands fail
@@ -34,8 +39,10 @@ import time
         # safe multithreading
         # metrics
         # reorder command that takes [#,#,#,#,#]
-        # play with argument becomes playnow
-        # warning about playlists
+        # play with argument becomes playnow x
+        # warning about playlists (done with typing command)
+        # replace string_queue_item
+        # handle music failing better (retries and prompts)
 
 
 
@@ -64,6 +71,7 @@ class MusicItem:
                 self.title = data.get('title')
                 self.data = data
 
+
 class MusicPlayer:
     def __init__(self, client, ytdl):
         self.client = client;
@@ -71,14 +79,25 @@ class MusicPlayer:
             'options': '-vn'
         }
         self.ytdl = ytdl        
+
+        # logger used for warning etc
+        self.logger = logging.getLogger('discord')
+
         # volume
         self.volume = 1.0
         # the volume transformer currently in use (used to change volume)
         self.player = None
 
+        # list of loaded playlists (not being played)
+        self.playlists = {}
 
-        #list of MusicItem's
-        self.audio_queue = []
+        # name of current queue
+        # queues are stored in a dictionary of queues
+        self.music_queues = {}
+        # by default there are 10 named queues
+        for i in range(0,3):
+            self.music_queues[str(i)] = []
+        self.current_queue = "0"
 
         # max number of songs to add
         self.max_playlist_size = 100
@@ -97,7 +116,6 @@ class MusicPlayer:
         self.voice_channel = None
 
 
-
     ### commands
 
     # playnow, stop, play, pause, add, next, queue, set_volume, clear, remove
@@ -109,8 +127,8 @@ class MusicPlayer:
             return
 
         if not await self.ensureVoice(voiceChannel):
-            await self.text_channel.send("Couldn't play.")
-            return
+            await self.send_error("Couldn't play.")
+            return False
         await self.play()
 
 
@@ -118,8 +136,8 @@ class MusicPlayer:
         if not await self.ensureText(textChannel):
             return
         if not await self.ensureVoice(voiceChannel):
-            await self.text_channel.send("Couldn't play.")
-            return
+            await self.send_error("Couldn't play.")
+            return False
         await self.playnow(url)
 
     async def command_pause(self, textChannel):
@@ -138,7 +156,6 @@ class MusicPlayer:
             return
         await self.add(url)
 
-
     async def command_addAt(self, url, pos, textChannel):
         if not await self.ensureText(textChannel):
             return
@@ -153,8 +170,8 @@ class MusicPlayer:
         if not await self.ensureText(textChannel):
             return
         if not await self.ensureVoice(voiceChannel):
-            await self.text_channel.send("Couldn't skip, player error")
-            return
+            await self.send_error("Couldn't skip, player error")
+            return False
         await self.next()
 
     async def command_clear(self, textChannel):
@@ -175,11 +192,29 @@ class MusicPlayer:
     async def command_follow(self, textChannel, voiceChannel):
         await self.follow(textChannel, voiceChannel)
 
+    async def command_print_queues(self, textChannel):
+
+        if not await self.ensureText(textChannel):
+            return
+        await self.print_queues()
+
+    async def command_switch_queue(self, queue_name, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.switch_queue(queue_name)
+
 
     ### internals
+
+    async def send_error(self, message):
+        await self.client.send_error(message, self.text_channel)
+
+    # prints to terminal and sends voice channel
+
     async def follow(self, tc, vc):
         if (tc == self.text_channel and vc == self.voice_channel):
-            await self.text_channel.send("Nothing to change, text and voice channel both identical.")
+            await self.send_error("Nothing to change, text and voice channel both identical.")
+            return False
         #if the text channel differs, change it and send a message
         if (tc != self.text_channel):
             self.text_channel = tc
@@ -209,7 +244,7 @@ class MusicPlayer:
         if self.voice_channel is None:
             self.voice_client = await voiceChannel.connect();
             if self.voice_client is None:
-                print ("connection failed, returning")
+                await self.send_error("Connection to voice server failed")
                 return False
             self.voice_channel = voiceChannel
             await self.text_channel.send("Voice channel set to {}".format(self.voice_channel.name))
@@ -243,23 +278,23 @@ class MusicPlayer:
         #make sure the url is good
         item = await self.parseUrl(url)
         if item is None:
-            self.text_channel.send("The url is not valid, can't play")
-            return
+            await self.send_error("The url is not valid, can't play")
+            return False
 
         await self.stop()
 
         #play the requested song
         await self.addAt(0, url)
         if not await self.ensureVoice(self.voice_channel):
-            await self.text_channel.send("Couldn't play.")
-            return
+            await self.send_error("Couldn't play.")
+            return False
         await self.play()
 
     # put the current song back in the queue and stop playing
     async def stop(self):
         # put the currently playing thing in the queue
         if self.currently_playing is not None:
-            self.audio_queue.insert(0, self.currently_playing)
+            self.music_queues[self.current_queue].insert(0, self.currently_playing)
             # remove it from currently playing
             self.currently_playing = None
         # stop playing
@@ -292,7 +327,7 @@ class MusicPlayer:
             return
         
         # if there is not something in the queue
-        if len(self.audio_queue) == 0:
+        if len(self.music_queues[self.current_queue]) == 0:
             await self.sendError(self.text_channel, "Couldn't play, no songs added")
             return
            
@@ -300,7 +335,7 @@ class MusicPlayer:
         ## main bit
 
         # get data for song
-        item = self.audio_queue[0]
+        item = self.music_queues[self.current_queue][0]
         source = discord.FFmpegPCMAudio(item.data['url'], **self.ffmpeg_options)
         player = discord.PCMVolumeTransformer(source, self.volume)
         player.volume = self.volume
@@ -319,15 +354,15 @@ class MusicPlayer:
 
         self.currently_playing = item
         self.player = player
-        del self.audio_queue[0]
+        del self.music_queues[self.current_queue][0]
         await self.set_playing(True, item.data.get('title'))
 
 
     async def pause(self):
         # stop playback for now
         if self.voice_client is None or self.state != "playing":
-            await self.text_channel.send("Can't pause, not playing")
-            return
+            await self.send_error("Can't pause, not playing")
+            return False
 
         self.voice_client.pause();
         self.state = "paused"
@@ -343,46 +378,47 @@ class MusicPlayer:
             await self.sendError(self.text_channel, "Couldn't parse that number, sorry")
             return
 
-        if pos < 0 or (len(self.audio_queue) > 0 and pos > len(self.audio_queue)):
+        if pos < 0 or (len(self.music_queues[self.current_queue]) > 0 and pos > len(self.music_queues[self.current_queue])):
             await self.sendError(self.text_channel, "Number not valid, needs to correspond to queue item")
 
         # if given metadata already
         # get metadata
         songs = await self.parseUrl(url)
-        if songs[0] is None:
-            await self.text_channel.send("Couldn't parse webpage. Can't play song.")
+        if songs is None or songs[0] is None:
+            await self.send_error("Couldn't parse webpage. Can't play song.")
+            return False
 
         # add metadata to queue
         i = 0
-        currentlen = len(self.audio_queue)
+        currentlen = len(self.music_queues[self.current_queue])
         for song in songs:
-            self.audio_queue.insert(pos + i, song)
+            self.music_queues[self.current_queue].insert(pos + i, song)
 
             # if we hit the song limit
             if currentlen + i >= self.max_playlist_size:
                 # if it was a playlist
                 if i > 1:
-                    await self.text_channel.send("Too many songs added, max {}. only able to add up to song {}, \"{}\".".format(
+                    await self.send_error("Too many songs added, max {}. only able to add up to song {}, \"{}\".".format(
                         self.max_playlist_size, 
                         pos + i,
-                        self.audio_queue[pos + i].title))
-                    return
+                        self.music_queues[self.current_queue][pos + i].title))
+                    return False
                 else:
                     #otherwise
-                    await self.text_channel.send("Too many songs added, max {}. Not able to add song.".format(
+                    await self.send_error("Too many songs added, max {}. Not able to add song.".format(
                         self.max_playlist_size))
                     return
             i += 1
 
         await self.text_channel.send("Added: {}. Position in queue: {}".format(
-            self.string_queue_item(self.audio_queue[pos]), pos))
+            self.string_queue_item(self.music_queues[self.current_queue][pos]), pos))
         
 
     async def add(self, url):
-        if len(self.audio_queue) == 0:
+        if len(self.music_queues[self.current_queue]) == 0:
             await self.addAt(0, url)
         else:
-            await self.addAt(len(self.audio_queue), url)
+            await self.addAt(len(self.music_queues[self.current_queue]), url)
 
     async def next(self):
         #stop the current song
@@ -393,8 +429,12 @@ class MusicPlayer:
         await self.play()
 
     async def getQueue(self):
-        # prints the queue out in messages of 50 entries
-        queuestring = '\n```'
+        ## prints the queue out in messages of 50 entries
+
+        # current queue name
+        queuestring = "\n```Current Queue: {}```\n```".format(self.current_queue)
+
+        # currently playing
         if self.currently_playing is not None:
             if self.state != "paused":
                 queuestring += "Currently Playing: " + self.string_queue_item(self.currently_playing) + "\n"
@@ -404,11 +444,13 @@ class MusicPlayer:
             queuestring += "Currently Playing: Nothing.\n"
 
         queuestring += '```\n```'
-        if len(self.audio_queue) == 0:
+
+        # items in queue
+        if len(self.music_queues[self.current_queue]) == 0:
             queuestring += "No items in queue."
         else:
             i = 0
-            for item in self.audio_queue:
+            for item in self.music_queues[self.current_queue]:
                 # if the string gets too long, split the message
                 if len(queuestring) + len(self.string_queue_item(item)) > 2000:
                     queuestring += "```"
@@ -421,6 +463,60 @@ class MusicPlayer:
 
         queuestring += "```"
         await self.text_channel.send(queuestring);
+
+    def print_abbreviated_queue(self, q):
+        # queue name
+        ret = "```Name: {}".format(q) 
+        # first three items (if that long)
+        if len(self.music_queues[q]) == 0:
+            ret += " <empty>```"
+            return ret
+        else:
+            ret += " Length: {}".format(len(self.music_queues[q]))
+        
+        qlen = 3
+        if len(self.music_queues[q]) < 3:
+            qlen = len(self.music_queues[q])  
+
+        for i in range(0,qlen):
+            ret += "\n{}: {}".format(i, self.music_queues[q][i].title)
+            i += 1
+
+        if len(self.music_queues[q]) > 3:
+            ret += "\n...```"
+        else:
+            ret += "\n```"
+
+
+        return ret
+            
+
+    async def print_queues(self):
+        printstring = ""
+        for q in self.music_queues.keys():
+            printstring += self.print_abbreviated_queue(q)
+        await self.text_channel.send(printstring)
+
+    async def switch_queue(self, name):
+        print( "Before: {} {}".format(self.currently_playing, self.state))
+
+        if name not in self.music_queues:
+            await self.send_error("No queue with name \'{}\' found.".format(name))
+            return False
+        #TODO: make this pause instead of stop
+
+        wasPlaying = self.currently_playing
+
+        if self.currently_playing:
+            await self.stop()
+
+        self.current_queue = name
+        if wasPlaying and len(self.music_queues[self.current_queue]) > 0:
+            print ("!!!!!!!!")
+            await self.play()
+
+        await self.text_channel.send("Switched queue to \'{}\'.".format(name))
+        print( "After: {} {}".format(self.currently_playing, self.state))
 
     async def setVolume(self, volume, textChannel):
         # volume is a string, try to turn it into a float
@@ -441,7 +537,7 @@ class MusicPlayer:
         await textChannel.send("Volume set to {}".format(volume))
 
     async def clear(self):
-        self.audio_queue = []
+        self.music_queues[self.current_queue] = []
         await self.text_channel.send("Song queue cleared.")
         
     async def remove(self, index):
@@ -449,15 +545,16 @@ class MusicPlayer:
         try:
             index = int(index)
         except ValueError:
-            await self.text_channel.send("Couldn't parse that number, sorry")
-            return
+            await self.send_error("Couldn't parse that number, sorry")
+            return False
 
-        if index < 0 or index > len(self.audio_queue) - 1:
-            await self.text_channel.send("Number not valid, needs to correspond to queue item")
+        if index < 0 or index > len(self.music_queues[self.current_queue]) - 1:
+            await self.send_error("Number not valid, needs to correspond to queue item")
+            return False
 
         
-        title = self.audio_queue[index].title
-        del self.audio_queue[index]
+        title = self.music_queues[self.current_queue][index].title
+        del self.music_queues[self.current_queue][index]
 
         await self.text_channel.send("Removed {} at positon {}".format(title, index))
 
@@ -495,6 +592,9 @@ class MusicPlayer:
         except:
             return None
 
+        # if getting data failed; return none
+        if data is None:
+            return None
 
         #make the MusicItem object
         songs = []
@@ -518,7 +618,7 @@ class MusicPlayer:
             return
 
         # if there are no more songs, don't do anything
-        if len(self.audio_queue) == 0:
+        if len(self.music_queues[self.current_queue]) == 0:
             return
 
         #try to play the next song

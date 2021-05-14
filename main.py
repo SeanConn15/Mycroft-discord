@@ -25,6 +25,8 @@ import urllib.parse
 
 #TODO: compute how long commands take
 #TODO: better logging using module
+#TODO: multi-server support
+#TODO: lowercase files in meme sharing thing
 
 
 
@@ -33,7 +35,7 @@ import urllib.parse
 logging.info('Initializing stuff')
 keyword = "m-"
 # set during initalization, the admin's unique id
-admin = 0
+adminid = 0
 _helpmessage = ["",
                 "To talk to mycroft, use `{} <command> [arguments]`.\n".format(keyword) + \
                 "Here are some of the things you do with mycroft:", 
@@ -119,6 +121,12 @@ class MycroftClient(discord.Client):
         # adding additional functions
         self.bg_task = self.loop.create_task(self.interrupt_signal())
 
+        # this will be the result of looking up the adminid
+        self.admin = None
+
+        # last 10 commands executed
+        self.recent_commands = []
+
     # if an interrupt was triggered, disconnect
     async def interrupt_signal(self):
         global interruptRecieved 
@@ -127,13 +135,13 @@ class MycroftClient(discord.Client):
             if (interruptRecieved):
                  global browser
                  interruptRecieved = False
-                 logging.info("Interrupt Recieved: disconnecting...")
+                 logging.warning("Interrupt Recieved: disconnecting...")
                  #if using a musicbot, disconnect it
                  if mp is not None:
                      await mp.stop()
                  await client.change_presence(status=discord.Status.offline) 
                  await client.close()
-                 logging.info("disconnected.")
+                 logging.warning("disconnected.")
                  #also stop the web browser
                  if browser is not None:
                      browser.close()
@@ -144,7 +152,25 @@ class MycroftClient(discord.Client):
             else:
                 await asyncio.sleep(10)
 
+    async def send_error(self, message, text_channel):
+        if text_channel is None:
+            logger.warning("No text channel to send error message to")
+        else:
+            try: 
+                await text_channel.send(message)
+            except:
+                logger.warning("failed to send error in text channel {}.".format(text_channel.name))
+        logger.warning(message)
+        # dm me about the issue
 
+        # try to find me if not already found
+        if self.admin is None:
+            self.admin = await self.fetch_user(adminid)
+
+        if self.admin is None:
+            self.logger.warning("Admin id invalid; no dm sent")
+        else:
+            await self.admin.send("Player error: {}".format(message))
 
 client = MycroftClient();
 
@@ -159,12 +185,14 @@ def disconnect():
 ############# Asynchronus Events ############# 
 @client.event
 async def on_ready():
-    logging.info("Connection established.")
-    logging.info("Authenicated as {}".format(client.user.name))
-
+    logging.warning("Connection established.")
+    logging.warning("Authenicated as {}".format(client.user.name))
+    
     # register the CTRL+C signal handler to stop the bot, sets a variable in disconnect() that
     # an asnchronous event checks
     client.loop.add_signal_handler(signal.SIGINT, disconnect)
+
+
 
 
 ## On message recieved
@@ -206,6 +234,8 @@ async def on_message(m):
         return
 
     logging.info("Command: [{}]".format(m.content))
+
+    sefl
 
     # the keyword is not case sensitive
     content[0] = content[0].lower()
@@ -292,13 +322,22 @@ async def on_message(m):
             else:
                 vc = None
             await mp.command_follow(m.channel, vc)
+        elif (content[0] == "printqueues" or content[0] == "pq"):
+            await mp.command_print_queues(m.channel)
+        elif (content[0] == "switchqueue" or content[0] == "sq"):
+            if len(content) < 2:
+                await m.channel.send("switchqueue needs a queuename to switch to")
+                return
+            await mp.command_switch_queue(content[1], m.channel)
+        else:
+            await m.channel.send("I didn't understand that command, sorry.")
     else:
         await m.channel.send("I didn't understand that command, sorry.")
 
 
 
     # super secret admin commands
-    if (m.author.id == admin):
+    if (m.author.id == adminid):
         if (content[0] == "ip"):
             response = subprocess.run("dig @resolver1.opendns.com ANY myip.opendns.com +short", shell=True, stdout=subprocess.PIPE, encoding="utf-8")
 
@@ -503,9 +542,13 @@ logging.info('Reading files for information on things')
 tfile = open('secrets', 'r+', 1)
 token = tfile.readline();  
 token = token[:-1] # get rid of the newline
-admin = tfile.readline();
-admin = int(admin[:-1])
+adminid = tfile.readline();
+adminid = int(adminid[:-1])
 tfile.close();
+
+# this for the send_error message
+client.adminid = adminid
+
 
 #logging.info('Starting the browser')
 #
