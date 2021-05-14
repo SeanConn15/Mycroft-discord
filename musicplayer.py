@@ -24,7 +24,7 @@ import time
         # skip song x
         # have killing bot not leave things in weird state x
     # advanced usage:
-        # playlists as items not individual songs (not doing)
+        # named playlists
         # saving playlists
             # saving playlist to file
                 # naming playlist
@@ -43,14 +43,13 @@ import time
         # warning about playlists (done with typing command)
         # replace string_queue_item
         # handle music failing better (retries and prompts)
+        # follows both text and voice x
+            # text channel attachment x
+            # voice channel attachment x
+        # seperate commands and member functions x
 
 
 
-#TODO: seperate commands and member functions
-#TODO: text channel attachment
-    # follow
-        # follows both text and voice
-#TODO: voice channel attachment
 
 class MusicItem:
         # { type = "single", data = {ydtl data} }
@@ -298,8 +297,7 @@ class MusicPlayer:
             # remove it from currently playing
             self.currently_playing = None
         # stop playing
-        await self.set_playing(False)
-        self.state = "stopped"
+        await self.set_status("stopped")
         if self.voice_client is not None:
             self.voice_client.stop()
 
@@ -320,8 +318,7 @@ class MusicPlayer:
             #if paused, continue 
             if self.state == "paused":
                 self.voice_client.resume()
-                await self.set_playing(True, self.currently_playing.title)
-                self.state = "playing"
+                await self.set_status("playing", self.currently_playing.title)
                 return
             await self.sendError(textChannel, "already playing")
             return
@@ -355,18 +352,12 @@ class MusicPlayer:
         self.currently_playing = item
         self.player = player
         del self.music_queues[self.current_queue][0]
-        await self.set_playing(True, item.data.get('title'))
+        await self.set_status("playing", item.data.get('title'))
 
 
     async def pause(self):
         # stop playback for now
-        if self.voice_client is None or self.state != "playing":
-            await self.send_error("Can't pause, not playing")
-            return False
-
-        self.voice_client.pause();
-        self.state = "paused"
-        await self.set_playing(False)
+        await self.set_status("paused")
         await self.text_channel.send("Paused.")
 
 
@@ -561,13 +552,35 @@ class MusicPlayer:
 
     ## internals
 
-    async def set_playing(self, playing, status=None):
-        if playing:
-            game = discord.Game(status)
+    #status is playing with name, paused, stopped, or idle
+    async def set_status(self, status, name=None):
+        if status == "playing":
+            game = discord.Game(name)
             await self.client.change_presence(status=discord.Status.online, activity=game)
-        else:
+
+        elif status == "idle":
             game = discord.CustomActivity("vibin")
             await self.client.change_presence(status=discord.Status.idle, activity=game)
+            self.state = "idle"
+
+        elif status == "paused":
+            if self.voice_client is None or self.state != "playing":
+                await self.send_error("Can't pause, not playing")
+                return
+
+            self.voice_client.pause();
+            game = discord.CustomActivity("paused")
+            await self.client.change_presence(status=discord.Status.idle, activity=game)
+            self.state = "paused"
+
+        elif status == "stopped":
+            game = discord.CustomActivity("stopped")
+            await self.client.change_presence(status=discord.Status.idle, activity=game)
+            self.state = "stopped"
+
+        else:
+            logger.warning("set_status given bad value: {}".format(status))
+
 
     def string_queue_item(self, item):
         ty_res = time.gmtime(item.data.get('duration'))
@@ -644,7 +657,7 @@ class MusicPlayer:
                 print("song stop coroutine failed: {}".format(e.message))
                 pass
 
-        coro3 = self.set_playing(False)
+        coro3 = self.set_status("stopped")
         fut3 = asyncio.run_coroutine_threadsafe(coro3, self.client.loop)
         try:
             fut3.result()

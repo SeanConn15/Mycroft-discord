@@ -235,7 +235,6 @@ async def on_message(m):
 
     logging.info("Command: [{}]".format(m.content))
 
-    sefl
 
     # the keyword is not case sensitive
     content[0] = content[0].lower()
