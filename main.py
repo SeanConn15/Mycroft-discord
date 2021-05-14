@@ -47,11 +47,16 @@ _helpmessage = ["",
                 "playnow [youtube url]: same as above",
                 "pause: stop playing music, resume with play",
                 "stop: leave voice, stop playing music",
+                "shuffle: shuffle the current queue:",
                 "queue: print out the music queue",
                 "clear: clear the music queue", 
                 "remove [index]: remove song at [index] from queue", 
+                "volume [1-100]: set the bot's volume"
+                "switchqueue [0-3]: switch to numbered song queue, shortcut sq"
+                "printqueues [0-3]: print the first couple songs of each queue, shortcut pq"
                 "next: play next song",
                 "follow: use this text/voice channel, defaults to where first command is issued",
+
                 "```",
                 "```",
                 "Misc:", 
@@ -65,7 +70,6 @@ _helpmessage = ["",
                 "```",
                 "To be added:",
                 "ranges for removing stuff",
-                "better youtube playlist support",
                 "saving playlists",
                 "fancier looking output",
                 "undo/redo for queue actions",
@@ -328,6 +332,8 @@ async def on_message(m):
                 await m.channel.send("switchqueue needs a queuename to switch to")
                 return
             await mp.command_switch_queue(content[1], m.channel)
+        elif (content[0] == "shuffle"):
+            await mp.command_shuffle(m.channel)
         else:
             await m.channel.send("I didn't understand that command, sorry.")
     else:

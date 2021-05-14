@@ -43,9 +43,15 @@ class MusicPlayerTest(IsolatedAsyncioTestCase):
         self.ytdl = Mock()
         self.ytdl.extract_info = Mock(return_value=data)
 
+        # creating client
         self.player = MusicPlayer(self.client, self.ytdl)
         
     def tearDown(self):
+        self.textChannel = None
+        self.textChannel2 = None
+        self.voiceChannel = None
+        self.voiceChannel2 = None
+        self.ytdl = None
         self.client = None
         self.player = None
 
@@ -64,6 +70,7 @@ class MusicPlayerTest(IsolatedAsyncioTestCase):
     async def test_playing(self):
         await self.player.command_add("test url", self.textChannel)
         await self.player.command_play(self.textChannel, self.voiceChannel)
+
         # make sure the voice channel was joined
         assert self.player.voice_channel == self.voiceChannel
         # make sure the text channel was used
@@ -72,6 +79,8 @@ class MusicPlayerTest(IsolatedAsyncioTestCase):
         # make sure the player had play called
         assert self.player.voice_client is not None
         assert self.player.voice_client.play.called
+        # make sure song is playing
+        self.assertEqual( self.player.state, "playing")
 
 
     async def test_add_while_playing(self):
@@ -90,9 +99,9 @@ class MusicPlayerTest(IsolatedAsyncioTestCase):
         await self.player.command_add("test url", self.textChannel)
 
         # make sure the currently playing song is the first one
-        self.assertEqual(self.player.music_queues[self.player.current_queue][0].title,  data2.get('title'))
-        # and the second on is in the queue
         self.assertEqual(self.player.currently_playing.title,  data1.get('title'))
+        # and the second on is in the queue
+        self.assertEqual(self.player.music_queues[self.player.current_queue][0].title,  data2.get('title'))
 
     async def test_pause(self):
         #add and play a song
@@ -206,18 +215,30 @@ class MusicPlayerTest(IsolatedAsyncioTestCase):
         assert self.player.currently_playing is None
 
     async def test_switching_between_playing_queues(self):
+        # song 1
+        data1 = { 'url': 'http://mock.url',
+                'title': 'Mock Youtube Video 1' }
+        self.ytdl.extract_info.return_value = data1
+
         await self.player.command_add("test url", self.textChannel)
+        # song 2
+        data2 = { 'url': 'http://mock.url',
+                'title': 'Mock Youtube Video 2' }
+        self.ytdl.extract_info.return_value = data2
         await self.player.command_switch_queue("1", self.textChannel)
         await self.player.command_add("test url", self.textChannel)
-        await self.player.command_switch_queue("0", self.textChannel)
 
         await self.player.command_play(self.textChannel, self.voiceChannel)
 
         
-        await self.player.command_switch_queue("1", self.textChannel)
+        await self.player.command_switch_queue("0", self.textChannel)
         
         self.assertEqual(self.player.state, "playing")
-        assert self.player.currently_playing is not None
+        self.assertEqual(self.player.currently_playing.title, data1.get('title'))
+
+
+        await self.player.command_switch_queue("1", self.textChannel)
+        self.assertEqual(self.player.currently_playing.title, data2.get('title'))
 
 
 ############ Testing errors

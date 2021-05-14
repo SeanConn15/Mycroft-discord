@@ -4,6 +4,7 @@ import asyncio
 import youtube_dl
 import logging
 import time
+import random
 ### Music related things
 #TODO: basic music playing
     #TODO: get it to play one thing from youtube
@@ -126,8 +127,14 @@ class MusicPlayer:
             return
 
         if not await self.ensureVoice(voiceChannel):
-            await self.send_error("Couldn't play.")
+            await self.send_error("Couldn't play, couldn't connect to voice")
             return False
+
+        #if already playing, warn and stop
+        if self.state == "playing":
+            await self.sendError(self.text_channel, "already playing")
+            return
+
         await self.play()
 
 
@@ -201,6 +208,11 @@ class MusicPlayer:
         if not await self.ensureText(textChannel):
             return
         await self.switch_queue(queue_name)
+
+    async def command_shuffle(self, textChannel):
+        if not await self.ensureText(textChannel):
+            return
+        await self.shuffle()
 
 
     ### internals
@@ -291,15 +303,7 @@ class MusicPlayer:
 
     # put the current song back in the queue and stop playing
     async def stop(self):
-        # put the currently playing thing in the queue
-        if self.currently_playing is not None:
-            self.music_queues[self.current_queue].insert(0, self.currently_playing)
-            # remove it from currently playing
-            self.currently_playing = None
-        # stop playing
         await self.set_status("stopped")
-        if self.voice_client is not None:
-            self.voice_client.stop()
 
     # leave all voice channels
     async def disconnect(self):
@@ -313,14 +317,15 @@ class MusicPlayer:
     # unpause, or play first thing in queue
     async def play(self):
         ## preconditions
-        # if playing anything
-        if self.currently_playing is not None:
-            #if paused, continue 
-            if self.state == "paused":
-                self.voice_client.resume()
-                await self.set_status("playing", self.currently_playing.title)
-                return
-            await self.sendError(textChannel, "already playing")
+
+        #if already playing, do nothing
+        if self.state == "playing":
+            return
+
+        #if paused, continue 
+        if self.state == "paused":
+            self.voice_client.resume()
+            await self.set_status("playing", self.currently_playing)
             return
         
         # if there is not something in the queue
@@ -346,13 +351,10 @@ class MusicPlayer:
             source.cleanup()
 
         # if successful, update data
-        if self.state == "stopped":
-            self.state = "playing";
-
-        self.currently_playing = item
+        await self.set_status("playing", item)
         self.player = player
+
         del self.music_queues[self.current_queue][0]
-        await self.set_status("playing", item.data.get('title'))
 
 
     async def pause(self):
@@ -489,25 +491,21 @@ class MusicPlayer:
         await self.text_channel.send(printstring)
 
     async def switch_queue(self, name):
-        print( "Before: {} {}".format(self.currently_playing, self.state))
 
         if name not in self.music_queues:
             await self.send_error("No queue with name \'{}\' found.".format(name))
             return False
-        #TODO: make this pause instead of stop
 
-        wasPlaying = self.currently_playing
+        wasPlaying = self.state
 
-        if self.currently_playing:
-            await self.stop()
+        if self.state == "paused" or self.state == "playing":
+            await self.set_status("stopped")
 
         self.current_queue = name
         if wasPlaying and len(self.music_queues[self.current_queue]) > 0:
-            print ("!!!!!!!!")
             await self.play()
 
         await self.text_channel.send("Switched queue to \'{}\'.".format(name))
-        print( "After: {} {}".format(self.currently_playing, self.state))
 
     async def setVolume(self, volume, textChannel):
         # volume is a string, try to turn it into a float
@@ -553,9 +551,11 @@ class MusicPlayer:
     ## internals
 
     #status is playing with name, paused, stopped, or idle
-    async def set_status(self, status, name=None):
+    async def set_status(self, status, song=None):
         if status == "playing":
-            game = discord.Game(name)
+            self.currently_playing = song
+            self.state = "playing"
+            game = discord.Game(song.title)
             await self.client.change_presence(status=discord.Status.online, activity=game)
 
         elif status == "idle":
@@ -564,7 +564,7 @@ class MusicPlayer:
             self.state = "idle"
 
         elif status == "paused":
-            if self.voice_client is None or self.state != "playing":
+            if self.state != "playing":
                 await self.send_error("Can't pause, not playing")
                 return
 
@@ -574,12 +574,28 @@ class MusicPlayer:
             self.state = "paused"
 
         elif status == "stopped":
+
+            # put the currently playing thing in the queue
+            if self.currently_playing is not None:
+                self.music_queues[self.current_queue].insert(0, self.currently_playing)
+                # remove it from currently playing
+                self.currently_playing = None
+            # stop playing
+            if self.voice_client is not None:
+                self.voice_client.stop()
             game = discord.CustomActivity("stopped")
             await self.client.change_presence(status=discord.Status.idle, activity=game)
             self.state = "stopped"
 
         else:
             logger.warning("set_status given bad value: {}".format(status))
+
+    async def shuffle(self):
+        if len(self.music_queues[self.current_queue]) == 0:
+            await self.send_error("Can't shuffle an empty queue.")
+            return
+        random.shuffle(self.music_queues[self.current_queue])
+        await self.text_channel.send("Shuffled.")
 
 
     def string_queue_item(self, item):
@@ -624,7 +640,6 @@ class MusicPlayer:
         if error:
             print("error in playing song: {}".format(error))
 
-        self.currently_playing = None
 
         #if manually stopped or paused don't do anything
         if self.state != "playing":
