@@ -128,8 +128,8 @@ class MycroftClient(discord.Client):
         # this will be the result of looking up the adminid
         self.admin = None
 
-        # last 10 commands executed
-        self.recent_commands = []
+        # last command executed
+        self.last_command = ""
 
     # if an interrupt was triggered, disconnect
     async def interrupt_signal(self):
@@ -165,6 +165,7 @@ class MycroftClient(discord.Client):
             except:
                 logger.warning("failed to send error in text channel {}.".format(text_channel.name))
         logger.warning(message)
+        logger.warning("Last command accepted: \'{}\'".format(self.last_command))
         # dm me about the issue
 
         # try to find me if not already found
@@ -174,7 +175,7 @@ class MycroftClient(discord.Client):
         if self.admin is None:
             self.logger.warning("Admin id invalid; no dm sent")
         else:
-            await self.admin.send("Player error: {}".format(message))
+            await self.admin.send("Player error: {}\nLast command accepted: {}".format(message, self.last_command))
 
 client = MycroftClient();
 
@@ -237,118 +238,121 @@ async def on_message(m):
     if (content[0] != keyword and m.channel.type != discord.ChannelType.private):
         return
 
-    logging.info("Command: [{}]".format(m.content))
+    # show as typing during command execution
+    with m.channel.typing():
+        logging.info("Command: [{}]".format(m.content))
 
+        client.last_command = "{}".format(m.content)
 
-    # the keyword is not case sensitive
-    content[0] = content[0].lower()
+        # the keyword is not case sensitive
+        content[0] = content[0].lower()
 
-    # now content is [command, args, ...]
+        # now content is [command, args, ...]
 
-    ## Parsing command
+        ## Parsing command
 
-    # if the command is invoked with a keyword, remove it
-    # this is so commands can be parsed the same even if they are in DM's
-    if (content[0] == keyword):
-        del content[0]
+        # if the command is invoked with a keyword, remove it
+        # this is so commands can be parsed the same even if they are in DM's
+        if (content[0] == keyword):
+            del content[0]
 
-    if (content[0] == "help"):
-       await m.channel.send(helpmessage)
-    elif (content[0] == "test"):
-        if (random.randint(0,1) == 1):
-            await m.channel.send("boop")
-        else:
-            await m.channel.send("beep")
-    elif (content[0] == "hello"):
-       await m.channel.send("Hello, {}.".format(m.author.name))
-    elif (content[0] == "bruce"):
-        f = discord.File(fp="memes/first.jpg", filename="test.jpg")
-        await m.channel.send(content=None, file=f)
-    elif (content[0] == "meme"):
-        await getMeme(m, content)     
-    elif (content[0] == "save"):
-        await saveMeme(m, content)     
-    elif (content[0] == "delete"):
-        await deleteMeme(m, content)
-    elif (content[0] == "list"):
-        await printMemes(m)
-    elif (content[0] == "waifu"):
-        await getWaifu(m)
-    elif mp is not None:
-        if (content[0] == "add"):
-            if len(content) < 2:
-                await mp.command_add("https://www.youtube.com/watch?v=CsGYh8AacgY", m.channel)
-                return
-            await mp.command_add(content[1], m.channel)
-        elif (content[0] == "addat"):
-            if len(content) < 2:
-                await m.channel.send("addat needs a song to add")
-                return
-            await mp.command_addAt(content[1], content[2],  m.channel)
-        elif (content[0] == "playnow" or ( content[0] == "play" and len(content) >1)):
-            # ^ play [url] calls playnow
-            if len(content) < 2:
-                await m.channel.send("playnow needs a song to play")
-                return
-            if m.author.voice is not None:
-                vc = m.author.voice.channel
+        if (content[0] == "help"):
+           await m.channel.send(helpmessage)
+        elif (content[0] == "test"):
+            if (random.randint(0,1) == 1):
+                await m.channel.send("boop")
             else:
-                vc = None
-            await mp.command_playnow(content[1], m.channel, vc)
-        elif (content[0] == "play"):
-            if m.author.voice is not None:
-                vc = m.author.voice.channel
+                await m.channel.send("beep")
+        elif (content[0] == "hello"):
+           await m.channel.send("Hello, {}.".format(m.author.name))
+        elif (content[0] == "bruce"):
+            f = discord.File(fp="memes/first.jpg", filename="test.jpg")
+            await m.channel.send(content=None, file=f)
+        elif (content[0] == "meme"):
+            await getMeme(m, content)     
+        elif (content[0] == "save"):
+            await saveMeme(m, content)     
+        elif (content[0] == "delete"):
+            await deleteMeme(m, content)
+        elif (content[0] == "list"):
+            await printMemes(m)
+        elif (content[0] == "waifu"):
+            await getWaifu(m)
+        elif mp is not None:
+            if (content[0] == "add"):
+                if len(content) < 2:
+                    await mp.command_add("https://www.youtube.com/watch?v=CsGYh8AacgY", m.channel)
+                    return
+                await mp.command_add(content[1], m.channel)
+            elif (content[0] == "addat"):
+                if len(content) < 2:
+                    await m.channel.send("addat needs a song to add")
+                    return
+                await mp.command_addAt(content[1], content[2],  m.channel)
+            elif (content[0] == "playnow" or ( content[0] == "play" and len(content) >1)):
+                # ^ play [url] calls playnow
+                if len(content) < 2:
+                    await m.channel.send("playnow needs a song to play")
+                    return
+                if m.author.voice is not None:
+                    vc = m.author.voice.channel
+                else:
+                    vc = None
+                await mp.command_playnow(content[1], m.channel, vc)
+            elif (content[0] == "play"):
+                if m.author.voice is not None:
+                    vc = m.author.voice.channel
+                else:
+                    vc = None
+                await mp.command_play(m.channel, vc)
+            elif (content[0] == "pause"):
+                await mp.command_pause(m.channel)
+            elif(content[0] == "queue"):
+                await mp.command_getQueue(m.channel)
+            elif (content[0] == "volume"):
+                await mp.command_setVolume(content[1], m.channel)
+            elif (content[0] == "clear"):
+                await mp.command_clear(m.channel)
+            elif (content[0] == "remove"):
+                await mp.command_remove(content[1], m.channel)
+            elif (content[0] == "stop"):
+                await mp.command_stop(m.channel)
+            elif (content[0] == "next"):
+                if m.author.voice is not None:
+                    vc = m.author.voice.channel
+                else:
+                    vc = None
+                await mp.command_next(m.channel, vc)
+            elif (content[0] == "follow"):
+                if m.author.voice is not None:
+                    vc = m.author.voice.channel
+                else:
+                    vc = None
+                await mp.command_follow(m.channel, vc)
+            elif (content[0] == "printqueues" or content[0] == "pq"):
+                await mp.command_print_queues(m.channel)
+            elif (content[0] == "switchqueue" or content[0] == "sq"):
+                if len(content) < 2:
+                    await m.channel.send("switchqueue needs a queuename to switch to")
+                    return
+                await mp.command_switch_queue(content[1], m.channel)
+            elif (content[0] == "shuffle"):
+                await mp.command_shuffle(m.channel)
             else:
-                vc = None
-            await mp.command_play(m.channel, vc)
-        elif (content[0] == "pause"):
-            await mp.command_pause(m.channel)
-        elif(content[0] == "queue"):
-            await mp.command_getQueue(m.channel)
-        elif (content[0] == "volume"):
-            await mp.command_setVolume(content[1], m.channel)
-        elif (content[0] == "clear"):
-            await mp.command_clear(m.channel)
-        elif (content[0] == "remove"):
-            await mp.command_remove(content[1], m.channel)
-        elif (content[0] == "stop"):
-            await mp.command_stop(m.channel)
-        elif (content[0] == "next"):
-            if m.author.voice is not None:
-                vc = m.author.voice.channel
-            else:
-                vc = None
-            await mp.command_next(m.channel, vc)
-        elif (content[0] == "follow"):
-            if m.author.voice is not None:
-                vc = m.author.voice.channel
-            else:
-                vc = None
-            await mp.command_follow(m.channel, vc)
-        elif (content[0] == "printqueues" or content[0] == "pq"):
-            await mp.command_print_queues(m.channel)
-        elif (content[0] == "switchqueue" or content[0] == "sq"):
-            if len(content) < 2:
-                await m.channel.send("switchqueue needs a queuename to switch to")
-                return
-            await mp.command_switch_queue(content[1], m.channel)
-        elif (content[0] == "shuffle"):
-            await mp.command_shuffle(m.channel)
+                await m.channel.send("I didn't understand that command, sorry.")
         else:
             await m.channel.send("I didn't understand that command, sorry.")
-    else:
-        await m.channel.send("I didn't understand that command, sorry.")
 
 
 
-    # super secret admin commands
-    if (m.author.id == adminid):
-        if (content[0] == "ip"):
-            response = subprocess.run("dig @resolver1.opendns.com ANY myip.opendns.com +short", shell=True, stdout=subprocess.PIPE, encoding="utf-8")
+        # super secret admin commands
+        if (m.author.id == adminid):
+            if (content[0] == "ip"):
+                response = subprocess.run("dig @resolver1.opendns.com ANY myip.opendns.com +short", shell=True, stdout=subprocess.PIPE, encoding="utf-8")
 
-            await m.channel.send("The IP of the server is: {}".format(response.stdout))
+                await m.channel.send("The IP of the server is: {}".format(response.stdout))
 
-    logging.info("-- command execution complete --")
+        logging.info("-- command execution complete --")
     
 ########## misc functions #########
 

@@ -50,6 +50,14 @@ import random
         # seperate commands and member functions x
 
 
+##############TODO: fix volume
+## TODO: fix status
+## TODO: use new bot command list
+## TODO: ignore text channel rules for my dm's, add no voice attribute part for ensurevoice
+## TODO: fix logging, just do it yourself and spam the terminal (with timestamps)
+## TODO: add skip that aliases to next
+## TODO: catch errors in player and recover
+## TODO: don't attach to DM channels
 
 
 class MusicItem:
@@ -132,7 +140,7 @@ class MusicPlayer:
 
         #if already playing, warn and stop
         if self.state == "playing":
-            await self.sendError(self.text_channel, "already playing")
+            await self.send_error(self.text_channel, "already playing")
             return
 
         await self.play()
@@ -330,7 +338,7 @@ class MusicPlayer:
         
         # if there is not something in the queue
         if len(self.music_queues[self.current_queue]) == 0:
-            await self.sendError(self.text_channel, "Couldn't play, no songs added")
+            await self.send_error(self.text_channel, "Couldn't play, no songs added")
             return
            
 
@@ -347,7 +355,7 @@ class MusicPlayer:
         if (self.voice_client):
             self.voice_client.play(player, after=self.donePlaying)
         else: 
-            await self.sendError(self.text_channel, "Couldn't play, no voice client")
+            await self.send_error(self.text_channel, "Couldn't play, no voice client")
             source.cleanup()
 
         # if successful, update data
@@ -368,11 +376,11 @@ class MusicPlayer:
         try:
             pos = int(pos)
         except ValueError:
-            await self.sendError(self.text_channel, "Couldn't parse that number, sorry")
+            await self.send_error(self.text_channel, "Couldn't parse that number, sorry")
             return
 
         if pos < 0 or (len(self.music_queues[self.current_queue]) > 0 and pos > len(self.music_queues[self.current_queue])):
-            await self.sendError(self.text_channel, "Number not valid, needs to correspond to queue item")
+            await self.send_error(self.text_channel, "Number not valid, needs to correspond to queue item")
 
         # if given metadata already
         # get metadata
@@ -512,10 +520,10 @@ class MusicPlayer:
         try:
             vol = int(volume)
         except ValueError:
-            await self.sendError(textChannel, "Couldn't parse that number, should be 1-100")
+            await self.send_error(textChannel, "Couldn't parse that number, should be 1-100")
             return
         if vol > 100 or vol < 1:
-            await self.sendError(textChannel, "Number should be integer between 1 and 100 inclusive")
+            await self.send_error(textChannel, "Number should be integer between 1 and 100 inclusive")
             return
         
         # if that works set it
@@ -603,12 +611,6 @@ class MusicPlayer:
         res = time.strftime("%H:%M:%S",ty_res)
         return item.data.get('title') + ', Length: ' + res
 
-    async def sendError(self, textChannel, message):
-        if textChannel is not None:
-            await textChannel.send(message)
-            print (message)
-        else: 
-            print ("error! no text channel to send response: {}".format(message))
 
 
     # returns data or none depending on url parsing
@@ -638,7 +640,9 @@ class MusicPlayer:
 
     def donePlaying(self, error):
         if error:
-            print("error in playing song: {}".format(error))
+            print("error in playing song {}.".format(error))
+            self.send_error("error in playing song.")
+
 
 
         #if manually stopped or paused don't do anything
