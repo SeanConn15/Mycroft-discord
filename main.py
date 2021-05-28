@@ -18,100 +18,6 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.keys import Keys
 import urllib.parse
-#TODO: @me if there are issues with a command
-#TODO: if someone does the cozy reaction post it from the bot
-#TODO: make help better, command specific
-#TODO: make admin only commands for controlling other things in the server
-
-#TODO: compute how long commands take
-#TODO: better logging using module
-#TODO: multi-server support
-#TODO: lowercase files in meme sharing thing
-
-
-
-
-############# Initializations ############# 
-logging.info('Initializing stuff')
-keyword = "m-"
-# set during initalization, the admin's unique id
-adminid = 0
-_helpmessage = ["",
-                "To talk to mycroft, use `{} <command> [arguments]`.\n".format(keyword) + \
-                "Here are some of the things you do with mycroft:", 
-                "```",
-                "Music:", 
-                "add [youtube url]: add a song to the queue",
-                "play: start playing the queue",
-                "play [youtube url]: stop whatever is playing and play this",
-                "playnow [youtube url]: same as above",
-                "pause: stop playing music, resume with play",
-                "stop: leave voice, stop playing music",
-                "shuffle: shuffle the current queue:",
-                "queue: print out the music queue",
-                "clear: clear the music queue", 
-                "remove [index]: remove song at [index] from queue", 
-                "volume [1-100]: set the bot's volume"
-                "switchqueue [0-3]: switch to numbered song queue, shortcut sq"
-                "printqueues [0-3]: print the first couple songs of each queue, shortcut pq"
-                "next: play next song",
-                "follow: use this text/voice channel, defaults to where first command is issued",
-
-                "```",
-                "```",
-                "Misc:", 
-                "hello: have mycroft say hello", 
-                "meme <name>: print out image \"name\", if already saved.", 
-                "save [name]: save an attached image as a meme, to be accessed by name", 
-                "list: list available meme names", 
-                "test: super secret command, for testing puposes",
-                "delete [name]: deletes the meme 'name'",
-                "```",
-                "```",
-                "To be added:",
-                "ranges for removing stuff",
-                "saving playlists",
-                "fancier looking output",
-                "undo/redo for queue actions",
-                "",
-                "https://github.com/SeanConn15/Mycroft-discord"]
-
-helpmessage = ""
-for line in _helpmessage:
-    helpmessage += line + '\n'
-
-
-
-
-# setting debug flag
-# changes what output is logged, and changes
-# various things for quick stopping and starting
-debug = True
-if len(sys.argv) > 1:
-    if sys.argv[1] == "d":
-        debug = True
-    else:
-        print ("usage: ./main.py [d]\n\td: turn on debug output to log")
-        sys.exit(0)
-
-# logging 
-# TODO: make this work better
-logger = logging.getLogger('discord')
-
-# log everything to the file
-filehandler = logging.FileHandler(filename='logs/discord.log', encoding='utf-8')
-filehandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-
-# only print out warnings
-texthandler = logging.StreamHandler()
-texthandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-
-logger.addHandler(filehandler)
-logger.addHandler(texthandler)
-
-## global variables
-# set to True if an unhandled intrrupt signal is recieved
-interruptRecieved = False
 
 
 ############ Client Definiton ############
@@ -134,27 +40,21 @@ class MycroftClient(discord.Client):
     # if an interrupt was triggered, disconnect
     async def interrupt_signal(self):
         global interruptRecieved 
-        global debug
         while True:
             if (interruptRecieved):
                  global browser
                  interruptRecieved = False
-                 logging.warning("Interrupt Recieved: disconnecting...")
+                 logger.warning("Interrupt Recieved: disconnecting...")
                  #if using a musicbot, disconnect it
                  if mp is not None:
                      await mp.stop()
                  await client.change_presence(status=discord.Status.offline) 
                  await client.close()
-                 logging.warning("disconnected.")
+                 logger.warning("Bot stopped.")
                  #also stop the web browser
                  if browser is not None:
                      browser.close()
-
-            # if on debug mode check every second
-            if (debug):
-                await asyncio.sleep(1)
-            else:
-                await asyncio.sleep(10)
+            await asyncio.sleep(5)
 
     async def send_error(self, message, text_channel):
         if text_channel is None:
@@ -173,7 +73,7 @@ class MycroftClient(discord.Client):
             self.admin = await self.fetch_user(adminid)
 
         if self.admin is None:
-            self.logger.warning("Admin id invalid; no dm sent")
+            logger.warning("Admin id invalid; no dm sent")
         else:
             await self.admin.send("Player error: {}\nLast command accepted: {}".format(message, self.last_command))
 
@@ -182,7 +82,7 @@ client = MycroftClient();
 ############# Local Input        #############
 
 def disconnect():
-    logging.info("SIGINT Recieved, setting variable")
+    logger.info("SIGINT Recieved, setting variable")
     global interruptRecieved 
     interruptRecieved = True
 
@@ -190,8 +90,8 @@ def disconnect():
 ############# Asynchronus Events ############# 
 @client.event
 async def on_ready():
-    logging.warning("Connection established.")
-    logging.warning("Authenicated as {}".format(client.user.name))
+    logger.warning("Connection established.")
+    logger.warning("Authenicated as {}".format(client.user.name))
     
     # register the CTRL+C signal handler to stop the bot, sets a variable in disconnect() that
     # an asnchronous event checks
@@ -214,7 +114,7 @@ async def on_message(m):
         return
 
     if (m.channel.type == discord.ChannelType.private):
-        logging.info("\n--DM Recieved--")
+        logger.info("\n--DM Recieved--")
 
     # a list of the words in the message
     content = m.content.split()
@@ -240,7 +140,7 @@ async def on_message(m):
 
     # show as typing during command execution
     with m.channel.typing():
-        logging.info("Command: [{}]".format(m.content))
+        logger.info("Command: [{}]".format(m.content))
 
         client.last_command = "{}".format(m.content)
 
@@ -352,7 +252,7 @@ async def on_message(m):
 
                 await m.channel.send("The IP of the server is: {}".format(response.stdout))
 
-        logging.info("-- command execution complete --")
+        logger.info("-- command execution complete --")
     
 ########## misc functions #########
 
@@ -379,13 +279,13 @@ async def getMeme(message, content):
     try:
         df = discord.File(fp="memes/" + filename,filename=filename)
     except IOError:
-        logging.error("Tried to open file: memes/{}, failed.".format(filename))
+        logger.error("Tried to open file: memes/{}, failed.".format(filename))
         # if that doesn't work try the gif
         df = ""
         try:
             df = discord.File(fp="memes/" + filename_gif,filename=filename_gif)
         except IOError:
-            logging.error("Tried to open file: memes/{}, failed.".format(filename_gif))
+            logger.error("Tried to open file: memes/{}, failed.".format(filename_gif))
             # if that doesn't work try the gif
             await message.channel.send("I couldn't find that image.")
             return
@@ -440,7 +340,7 @@ async def saveMeme(message, content):
         try:
             im = Image.open("memes/TEMP-" + filename)
         except IOError:
-            logging.error("image failed to save: memes/TEMP-" + filename)
+            logger.error("image failed to save: memes/TEMP-" + filename)
             await message.channel.send("it didnt work, image failed to save")
             return
         # convert it and save it
@@ -454,12 +354,11 @@ async def saveMeme(message, content):
     ## save meme
         await message.attachments[0].save("memes/" + filename)
 
+    ## say you saved it
     if (os.path.isfile("memes/" + filename)):
         await message.channel.send("fuckkin saved")
     else:
         await message.channel.send("it didnt work")
-    ## say you saved it
-    #TODO: react with fuckkin saved if that emote exists
 
 async def deleteMeme(message, content):
     ## get filename
@@ -514,8 +413,8 @@ async def getWaifu(message):
 
     images = browser.find_elements_by_class_name('tile--img__img')
     if (len(images) == 0):
-        logging.error("no images found in web scrape!!!")
-        logging.error("HTML------------------\n\n{}\n\n-----------------".format(browser.page_source))
+        logger.error("no images found in web scrape!!!")
+        logger.error("HTML------------------\n\n{}\n\n-----------------".format(browser.page_source))
         return
 
     waifu_link = images[random.randint(0, len(images) - 1)]
@@ -530,7 +429,7 @@ async def getWaifu(message):
     try:
         df = discord.File(fp="./tempWaifu.jpg",filename="best_waifu.jpg")
     except IOError:
-        logging.error("Tried to open a saved waifu image and failed")
+        logger.error("Tried to open a saved waifu image and failed")
         return
 
 
@@ -543,10 +442,81 @@ async def getWaifu(message):
 
 
 ############# Startup ############# 
+keyword = "m-"
+# set during initalization, the admin's unique id
+adminid = 0
+_helpmessage = ["",
+                "To talk to mycroft, use `{} <command> [arguments]`.\n".format(keyword) + \
+                "Here are some of the things you do with mycroft:", 
+                "```",
+                "Music:", 
+                "add [youtube url]: add a song to the queue",
+                "play: start playing the queue",
+                "play [youtube url]: stop whatever is playing and play this",
+                "playnow [youtube url]: same as above",
+                "pause: stop playing music, resume with play",
+                "stop: leave voice, stop playing music",
+                "shuffle: shuffle the current queue:",
+                "queue: print out the music queue",
+                "clear: clear the music queue", 
+                "remove [index]: remove song at [index] from queue", 
+                "volume [1-100]: set the bot's volume"
+                "switchqueue [0-3]: switch to numbered song queue, shortcut sq"
+                "printqueues [0-3]: print the first couple songs of each queue, shortcut pq"
+                "next: play next song",
+                "follow: use this text/voice channel, defaults to where first command is issued",
+
+                "```",
+                "```",
+                "Misc:", 
+                "hello: have mycroft say hello", 
+                "meme <name>: print out image \"name\", if already saved.", 
+                "save [name]: save an attached image as a meme, to be accessed by name", 
+                "list: list available meme names", 
+                "test: super secret command, for testing puposes",
+                "delete [name]: deletes the meme 'name'",
+                "```",
+                "```",
+                "To be added:",
+                "ranges for removing stuff",
+                "saving playlists",
+                "fancier looking output",
+                "undo/redo for queue actions",
+                "",
+                "https://github.com/SeanConn15/Mycroft-discord"]
+
+helpmessage = ""
+for line in _helpmessage:
+    helpmessage += line + '\n'
+
+
+# logging 
+logger = logging.getLogger('Mycroft')
+logger.setLevel(10)
+
+# log everything to the file
+filehandler = logger.FileHandler(filename='logs/discord.log', encoding='utf-8')
+filehandler.setFormatter(logger.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+filehandler.setLevel(10) # info
+
+# only print out warnings
+texthandler = logger.StreamHandler()
+texthandler.setFormatter(logger.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+texthandler.setLevel(30) # warning
+
+logger.addHandler(filehandler)
+logger.addHandler(texthandler)
+
+logger.warning('Starting up bot..')
+
+## global variables
+# set to True if an unhandled intrrupt signal is recieved
+interruptRecieved = False
 
 
 # reading from startup files
-logging.info('Reading files for information on things')
+logger.info('Reading files for information on things')
+
 # getting the token from the .secrets file
 tfile = open('secrets', 'r+', 1)
 token = tfile.readline();  
@@ -559,7 +529,7 @@ tfile.close();
 client.adminid = adminid
 
 
-#logging.info('Starting the browser')
+#logger.info('Starting the browser')
 #
 #options = Options()
 #options.headless = True
@@ -568,7 +538,7 @@ browser = None
 
 
 # creating music player
-logging.info("Making music player")
+logger.info("Making music player")
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -586,5 +556,5 @@ ytdl.add_default_info_extractors()
 mp = MusicPlayer(client, ytdl);
 
 # connecting to discord
-logging.info('Making connections')
+logger.warning('Connecting to discord...')
 client.run(token)

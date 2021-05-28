@@ -1,0 +1,65 @@
+## Client to-do's
+
+#TODO: @me if there are issues with a command
+#TODO: if someone does the cozy reaction post it from the bot
+#TODO: make help better, command specific
+#TODO: make admin only commands for controlling other things in the server
+
+#TODO: compute how long commands take
+#TODO: better logging using module
+#TODO: multi-server support
+#TODO: lowercase files in meme sharing thing
+
+## Music related things
+#TODO: basic music playing
+    #TODO: get it to play one thing from youtube
+        # download a video with youtube-dl x
+        # join a voice channel x
+        # play something in a voice channel x
+        # auto connect and disconnect afterwards x
+        # steam a video and play in voice channel x
+        # request a video by url and steam in voice channel x
+    # basic usage:
+        # play and pause x
+        # bot volume x
+        # removing items from queue x
+        # clearing queue x
+        # current status x
+        # stop playing current song put back into queue
+        # 'play this now then continue' x
+        # skip song x
+        # have killing bot not leave things in weird state x
+    # advanced usage:
+        # named playlists
+        # saving playlists
+            # saving playlist to file
+                # naming playlist
+            # loading playlist
+
+        # fancier output
+        # typing when thinking
+        # DM's when commands fail
+        # undo/redo for queue actions
+    # misc:
+        # leave voice channel when disconnecting x
+        # safe multithreading
+        # metrics
+        # reorder command that takes [#,#,#,#,#]
+        # play with argument becomes playnow x
+        # warning about playlists (done with typing command)
+        # replace string_queue_item
+        # handle music failing better (retries and prompts)
+        # follows both text and voice x
+            # text channel attachment x
+            # voice channel attachment x
+        # seperate commands and member functions x
+
+
+##############TODO: fix volume
+## TODO: fix status
+## TODO: use new bot command list
+## TODO: ignore text channel rules for my dm's, add no voice attribute part for ensurevoice
+## TODO: fix logging, just do it yourself and spam the terminal (with timestamps)
+## TODO: add skip that aliases to next
+## TODO: catch errors in player and recover
+## TODO: don't attach to DM channels
